@@ -1,23 +1,28 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Reportes - Admin NexoShop</title>
+    <title>Reportes - Admin Yapa Shop</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body class="admin-page">
-    <aside class="sidebar">
-        <div class="sidebar-logo"><span>NexoShop</span> Admin</div>
+    <div class="mobile-topbar">
+        <button type="button" class="mobile-menu-btn" id="sidebar-toggle" aria-label="Abrir menu" aria-expanded="false">&#9776;</button>
+        <span class="mobile-topbar-brand">Yapa Shop Admin</span>
+    </div>
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <aside class="sidebar" id="admin-sidebar">
+        <div class="sidebar-logo"><span>Yapa Shop</span> Admin</div>
         <nav class="sidebar-nav">
-            <a href="{{ url_for('admin_dashboard_view') }}" class="nav-item">🏠 Dashboard</a>
-            <a href="{{ url_for('admin_inventory') }}" class="nav-item">📦 Inventario</a>
-            <a href="{{ url_for('admin_sales') }}" class="nav-item">🧾 Ventas</a>
-            <a href="{{ url_for('admin_reports') }}" class="nav-item active">📈 Reportes</a>
+            <a href="{{ url_for('admin_dashboard_view') }}" class="nav-item">Dashboard</a>
+            <a href="{{ url_for('admin_inventory') }}" class="nav-item">Inventario</a>
+            <a href="{{ url_for('admin_sales') }}" class="nav-item">Ventas</a>
+            <a href="{{ url_for('admin_reports') }}" class="nav-item active">Reportes</a>
             {% if admin_role == 'admin' %}
-            <a href="{{ url_for('admin_observability') }}" class="nav-item">🩺 Observabilidad</a>
+            <a href="{{ url_for('admin_observability') }}" class="nav-item">Observabilidad</a>
             {% endif %}
-            <a href="{{ url_for('admin_logout') }}" class="nav-item nav-logout">🚪 Salir</a>
+            <a href="{{ url_for('admin_logout') }}" class="nav-item nav-logout">Salir</a>
         </nav>
     </aside>
 
@@ -50,31 +55,41 @@
 
         <div class="card">
             <h2>Top productos vendidos</h2>
-            <table class="data-table">
-                <thead><tr><th>Producto</th><th>Unidades</th></tr></thead>
-                <tbody>
-                    {% for name, qty in top_products %}
-                    <tr><td>{{ name }}</td><td>{{ qty }}</td></tr>
-                    {% else %}
-                    <tr><td colspan="2" class="empty-state">Sin ventas en el período.</td></tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+            <div class="table-wrap">
+                <table class="data-table">
+                    <thead><tr><th>Producto</th><th>Unidades</th></tr></thead>
+                    <tbody>
+                        {% for name, qty in top_products %}
+                        <tr><td>{{ name }}</td><td>{{ qty }}</td></tr>
+                        {% else %}
+                        <tr><td colspan="2" class="empty-state">Sin ventas en el período.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         <div class="card">
             <h2>Ventas diarias</h2>
-            <table class="data-table">
-                <thead><tr><th>Fecha</th><th>Total</th></tr></thead>
-                <tbody>
-                    {% for row in daily_sales %}
-                    <tr><td>{{ row.date }}</td><td>S/ {{ "%.2f"|format(row.total) }}</td></tr>
-                    {% else %}
-                    <tr><td colspan="2" class="empty-state">No hay registros diarios.</td></tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+            <div class="table-wrap">
+                <table class="data-table">
+                    <thead><tr><th>Fecha</th><th>Total</th></tr></thead>
+                    <tbody>
+                        {% for row in daily_sales %}
+                        <tr><td>{{ row.date }}</td><td>S/ {{ "%.2f"|format(row.total) }}</td></tr>
+                        {% else %}
+                        <tr><td colspan="2" class="empty-state">No hay registros diarios.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         </div>
     </main>
+    <script src="{{ url_for('static', filename='js/admin.js') }}"></script>
 </body>
 </html>
+
+
+
+
+

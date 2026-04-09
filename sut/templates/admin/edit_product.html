@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Editar Producto - Admin Yapa Shop</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="admin-page">
+    <div class="mobile-topbar">
+        <button type="button" class="mobile-menu-btn" id="sidebar-toggle" aria-label="Abrir menu" aria-expanded="false">&#9776;</button>
+        <span class="mobile-topbar-brand">Yapa Shop Admin</span>
+    </div>
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <aside class="sidebar" id="admin-sidebar">
+        <div class="sidebar-logo"><span>Yapa Shop</span> Admin</div>
+        <nav class="sidebar-nav">
+            <a href="{{ url_for('admin_dashboard_view') }}" class="nav-item" id="nav-dashboard">Dashboard</a>
+            <a href="{{ url_for('admin_inventory') }}" class="nav-item active" id="nav-inventory">Inventario</a>
+            <a href="{{ url_for('admin_sales') }}" class="nav-item" id="nav-sales">Ventas</a>
+            <a href="{{ url_for('admin_reports') }}" class="nav-item" id="nav-reports">Reportes</a>
+            {% if admin_role == 'admin' %}
+            <a href="{{ url_for('admin_observability') }}" class="nav-item" id="nav-observability">Observabilidad</a>
+            {% endif %}
+            {% if admin_role in ['admin', 'operator'] %}
+            <a href="{{ url_for('admin_upload_csv') }}" class="nav-item" id="nav-upload-csv">Cargar CSV</a>
+            {% endif %}
+            <a href="{{ url_for('store_home') }}" class="nav-item" target="_blank">Ver Tienda</a>
+            <a href="{{ url_for('admin_logout') }}" class="nav-item nav-logout">Salir</a>
+        </nav>
+    </aside>
+
+    <main class="main-content">
+        <header class="page-header">
+            <h1>Editar Producto</h1>
+        </header>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endwith %}
+
+        <div class="card">
+            <form method="POST" class="product-form" id="edit-product-form" enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="sku">SKU *</label>
+                        <input type="text" id="sku" name="sku" required value="{{ product.sku }}">
+                    </div>
+                    <div class="form-group">
+                        <label for="name">Nombre *</label>
+                        <input type="text" id="name" name="name" required value="{{ product.name }}">
+                    </div>
+                    <div class="form-group">
+                        <label for="category">Categoría</label>
+                        <input type="text" id="category" name="category" value="{{ product.category }}">
+                    </div>
+                    <div class="form-group">
+                        <label for="price">Precio *</label>
+                        <input type="number" id="price" name="price" step="0.01" min="0" required value="{{ product.price }}">
+                    </div>
+                    <div class="form-group">
+                        <label for="stock">Stock *</label>
+                        <input type="number" id="stock" name="stock" min="0" required value="{{ product.stock }}">
+                    </div>
+                    <div class="form-group">
+                        <label for="image_url">URL de Imagen</label>
+                        <input type="url" id="image_url" name="image_url" value="{{ product.image_url }}">
+                    </div>
+                    <div class="form-group">
+                        <label for="image_file">Subir Nueva Imagen</label>
+                        <input type="file" id="image_file" name="image_file" accept=".png,.jpg,.jpeg,.webp,.gif,.avif,image/*">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="description">Descripción</label>
+                    <textarea id="description" name="description" rows="3">{{ product.description }}</textarea>
+                </div>
+                <div class="form-actions">
+                    <a href="{{ url_for('admin_inventory') }}" class="btn btn-secondary">Cancelar</a>
+                    <button type="submit" class="btn btn-primary" id="btn-update-product">Guardar Cambios</button>
+                </div>
+            </form>
+        </div>
+    </main>
+    <script src="{{ url_for('static', filename='js/admin.js') }}"></script>
+</body>
+</html>

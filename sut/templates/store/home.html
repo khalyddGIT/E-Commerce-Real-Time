@@ -1,20 +1,19 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tienda - NexoShop</title>
-    <meta name="description" content="Tienda online con inventario en tiempo real. Compra productos con actualización instantánea de stock.">
+    <title>Tienda - Yapa Shop</title>
+    <meta name="description" content="Landing page de Yapa Shop con catalogo moderno, busqueda rapida y compra simple.">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 </head>
-<body class="store-page">
-    <!-- Header -->
+<body class="store-page store-landing">
+    {% set featured = products[0] if products else None %}
+
     <header class="store-header">
         <div class="header-inner">
-            <a href="{{ url_for('store_home') }}" class="store-logo" id="store-logo">
-                NexoShop
-            </a>
+            <a href="{{ url_for('store_home') }}" class="store-logo" id="store-logo">Yapa Shop</a>
             <nav class="store-nav">
                 <a href="{{ url_for('store_home') }}" class="nav-link" id="nav-home">Inicio</a>
                 {% for cat in categories %}
@@ -29,31 +28,97 @@
                 <form method="GET" action="{{ url_for('store_home') }}" class="search-form" id="search-form">
                     <input type="text" name="search" id="search-input"
                            placeholder="Buscar productos..." value="{{ search_query }}">
-                    <button type="submit" id="btn-search">🔍</button>
+                    <button type="submit" id="btn-search" aria-label="Buscar">Buscar</button>
                 </form>
                 <a href="{{ url_for('store_cart') }}" class="cart-btn" id="btn-cart">
-                    🛒 <span id="cart-count">0</span>
+                    Carrito <span id="cart-count">0</span>
                 </a>
             </div>
         </div>
     </header>
 
-    <!-- Hero -->
     <section class="store-hero">
-        <h1>Tecnología & Estilo</h1>
-        <p>Los mejores productos con actualización de stock en tiempo real</p>
-        <span class="rt-badge" id="realtime-status">🟢 Tiempo Real Activo</span>
+        <div class="store-hero-inner landing-hero-grid">
+            <div class="landing-hero-copy">
+                <span class="hero-eyebrow">Yapa Shop Store</span>
+                <h1>Compra con estilo, velocidad y confianza</h1>
+                <p>Encuentra tecnologia, hogar y moda en una sola tienda. Navega facil, agrega al carrito y compra en minutos.</p>
+                <div class="landing-hero-actions">
+                    <a href="#catalogo" class="btn btn-primary">Ver catalogo</a>
+                    <a href="{{ url_for('store_cart') }}" class="btn btn-secondary">Ir al carrito</a>
+                </div>
+                <div class="hero-metrics" aria-label="Resumen de catalogo">
+                    <div class="hero-metric">
+                        <strong>{{ products|length }}</strong>
+                        <span>Productos</span>
+                    </div>
+                    <div class="hero-metric">
+                        <strong>{{ categories|length }}</strong>
+                        <span>Categorias</span>
+                    </div>
+                    <div class="hero-metric">
+                        <strong>Entrega</strong>
+                        <span>Rapida y segura</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="landing-hero-card">
+                {% if featured %}
+                    <span class="landing-card-chip">Producto destacado</span>
+                    <h2>{{ featured.name }}</h2>
+                    <p>{{ featured.category }} · SKU {{ featured.sku }}</p>
+                    <div class="landing-card-price">S/ {{ "%.2f"|format(featured.price) }}</div>
+                    <a href="{{ url_for('store_product_detail', product_id=featured.id) }}" class="btn btn-secondary">Ver detalle</a>
+                {% else %}
+                    <h2>Catalogo en actualizacion</h2>
+                    <p>Pronto veras nuevos productos destacados.</p>
+                {% endif %}
+            </div>
+        </div>
     </section>
 
-    <!-- Flash messages -->
+    <section class="landing-benefits">
+        <article class="benefit-item">
+            <h3>Compra simple</h3>
+            <p>Todo el flujo de compra en pocos pasos.</p>
+        </article>
+        <article class="benefit-item">
+            <h3>Pagos flexibles</h3>
+            <p>Opciones comodas para finalizar tu pedido.</p>
+        </article>
+        <article class="benefit-item">
+            <h3>Catalogo activo</h3>
+            <p>Productos disponibles y actualizados.</p>
+        </article>
+    </section>
+
+    <section class="landing-categories">
+        <div class="landing-section-head">
+            <h2>Explora por categoria</h2>
+            <p>Elige una categoria para filtrar tu compra.</p>
+        </div>
+        <div class="landing-categories-grid">
+            {% for cat in categories %}
+                <a href="{{ url_for('store_home', category=cat) }}" class="landing-category-pill">{{ cat }}</a>
+            {% else %}
+                <span class="landing-category-pill is-muted">Sin categorias</span>
+            {% endfor %}
+        </div>
+    </section>
+
     {% with messages = get_flashed_messages(with_categories=true) %}
         {% for category, message in messages %}
             <div class="alert alert-{{ category }}">{{ message }}</div>
         {% endfor %}
     {% endwith %}
 
-    <!-- Product Grid -->
-    <main class="store-main">
+    <main class="store-main" id="catalogo">
+        <div class="landing-section-head">
+            <h2>Catalogo destacado</h2>
+            <p>{{ products|length }} producto(s) disponible(s)</p>
+        </div>
+
         <div class="products-grid" id="products-grid">
             {% for product in products %}
             <article class="product-card" id="product-card-{{ product.id }}"
@@ -62,10 +127,13 @@
                      data-stock="{{ product.stock }}">
                 <a href="{{ url_for('store_product_detail', product_id=product.id) }}" class="product-link">
                     {% if product.image_url %}
-                        <img src="{{ product.image_url }}" alt="{{ product.name }}"
-                             class="product-image" loading="lazy">
+                        <img src="{{ product_image_src(product.image_url) }}"
+                             data-proxy-src="{{ product_image_proxy_src(product.image_url) }}"
+                             alt="{{ product.name }}"
+                             class="product-image remote-image"
+                             loading="lazy">
                     {% else %}
-                        <div class="product-image-placeholder">📦</div>
+                        <div class="product-image-placeholder">Producto</div>
                     {% endif %}
                 </a>
                 <div class="product-info">
@@ -78,9 +146,9 @@
                     <div class="product-stock-info">
                         <span class="stock-indicator" id="stock-indicator-{{ product.id }}">
                             {% if product.stock > 0 %}
-                                ✅ {{ product.stock }} en stock
+                                Disponible: {{ product.stock }}
                             {% else %}
-                                ❌ Sin stock
+                                Sin stock
                             {% endif %}
                         </span>
                     </div>
@@ -92,7 +160,7 @@
                                 data-product-id="{{ product.id }}"
                                 {% if product.stock == 0 %}disabled{% endif %}
                                 onclick="addToCart(this.dataset.productId)">
-                            {% if product.stock == 0 %}Sin Stock{% else %}Añadir al Carrito{% endif %}
+                            {% if product.stock == 0 %}Sin Stock{% else %}Añadir al carrito{% endif %}
                         </button>
                     </div>
                 </div>
@@ -105,9 +173,24 @@
         </div>
     </main>
 
-    <!-- Toast -->
-    <div id="toast-container" class="toast-container"></div>
+    <section class="landing-cta">
+        <h2>Listo para comprar</h2>
+        <p>Agrega productos al carrito y finaliza tu pedido en menos de 2 minutos.</p>
+        <a href="#catalogo" class="btn btn-primary">Ir al catalogo</a>
+    </section>
 
-    <script src="{{ url_for('static', filename='js/store.js') }}"></script>
+    <div id="toast-container" class="toast-container"></div>
+    <script src="{{ url_for('static', filename='js/store.js', v='20260409-fix-storejs') }}"></script>
+    <script>
+        document.querySelectorAll('img.remote-image').forEach((img) => {
+            img.addEventListener('error', function () {
+                const proxySrc = this.getAttribute('data-proxy-src');
+                if (proxySrc && this.src !== proxySrc) {
+                    this.src = proxySrc;
+                }
+            }, { once: true });
+        });
+    </script>
 </body>
 </html>
+

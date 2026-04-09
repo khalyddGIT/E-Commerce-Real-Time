@@ -156,13 +156,18 @@ def fresh_bulk_csv():
 def admin_driver(driver):
     """Driver ya autenticado en el admin."""
     from pages.admin.login_page import AdminLoginPage
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+
     login = AdminLoginPage(driver)
     login.navigate()
     login.login_as_admin()
-    # Esperar redirección al inventario
-    from selenium.webdriver.support.ui import WebDriverWait
-    from selenium.webdriver.support import expected_conditions as EC
-    WebDriverWait(driver, 10).until(EC.url_contains('/admin/inventory'))
+    WebDriverWait(driver, 10).until(
+        lambda d: '/admin/dashboard' in d.current_url or '/admin/inventory' in d.current_url
+    )
+    driver.get(f"{SUT_BASE_URL}/admin/inventory")
+    WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, 'inventory-table')))
     return driver
 
 
@@ -171,11 +176,11 @@ def admin_driver(driver):
 @pytest.fixture(scope='function')
 def two_browsers():
     """
-    Fixture que provee dos drivers independientes para CP04.
+    Fixture que provee dos drivers independientes para CP04 usando Selenium Grid.
     Retorna (chrome_driver, firefox_driver).
     """
-    d1 = DriverFactory.get_driver(browser='chrome', remote=False, headless=True)
-    d2 = DriverFactory.get_driver(browser='firefox', remote=False, headless=True)
+    d1 = DriverFactory.get_driver(browser='chrome', remote=True, headless=True)
+    d2 = DriverFactory.get_driver(browser='firefox', remote=True, headless=True)
     yield d1, d2
     d1.quit()
     d2.quit()

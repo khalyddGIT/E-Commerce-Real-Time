@@ -1,8 +1,8 @@
-"""
+﻿"""
 tests/test_realtime.py
-CP03: Flujo de compra E2E con verificación de decremento de stock.
-CP04: Persistencia de sesión del carrito entre Chrome y Firefox.
-CP05: Concurrencia — dos hilos comprando la última unidad simultáneamente.
+CP03: Flujo de compra E2E con verificaciÃ³n de decremento de stock.
+CP04: Persistencia de sesiÃ³n del carrito entre Chrome y Firefox.
+CP05: Concurrencia â€” dos hilos comprando la Ãºltima unidad simultÃ¡neamente.
 """
 import pytest
 import threading
@@ -18,10 +18,12 @@ from pages.store.product_page import StoreProductPage
 from pages.store.cart_page import StoreCartPage
 from utils.driver_factory import DriverFactory, SUT_BASE_URL
 
+BROWSER_BASE_URL = os.getenv("BROWSER_BASE_URL", SUT_BASE_URL)
 
-# ════════════════════════════════════════════════════════════════════════════
+
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 # CP03: Flujo End-to-End completo
-# ════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 @pytest.mark.e2e
 class TestCP03_FlujoCompraCompleto:
@@ -36,9 +38,9 @@ class TestCP03_FlujoCompraCompleto:
         1. Registrar stock inicial en Admin.
         2. Agregar producto al carrito en la Tienda.
         3. Completar el checkout.
-        4. Verificar que el stock en Admin disminuyó.
+        4. Verificar que el stock en Admin disminuyÃ³.
         """
-        PRODUCT_ID = 1  # Laptop (stock=10 después del reset)
+        PRODUCT_ID = 1  # Laptop (stock=10 despuÃ©s del reset)
         PRODUCT_URL = '/store/product/1'
 
         # PASO 1: Verificar stock inicial en Admin
@@ -61,7 +63,7 @@ class TestCP03_FlujoCompraCompleto:
             from selenium.webdriver.support import expected_conditions as EC
             from selenium.webdriver.common.by import By
             WebDriverWait(store_driver, 10).until(
-                EC.text_to_be_present_in_element((By.ID, 'btn-add-to-cart'), '¡Agregado!')
+                EC.text_to_be_present_in_element((By.ID, 'btn-add-to-cart'), 'Agregado')
             )
 
             # PASO 3: Ir al carrito y completar checkout
@@ -73,23 +75,23 @@ class TestCP03_FlujoCompraCompleto:
                 address='Av. Las Flores 123, Lima, Peru'
             )
 
-            # VALIDACIÓN: Página de éxito apareció
+            # VALIDACIÃ“N: PÃ¡gina de Ã©xito apareciÃ³
             order_id_text = cart.get_order_id()
             assert 'Pedido #' in order_id_text, \
-                f"No se encontró el ID de pedido. Texto: {order_id_text}"
+                f"No se encontrÃ³ el ID de pedido. Texto: {order_id_text}"
 
-            # PASO 4: Verificar en el Admin que el stock disminuyó
+            # PASO 4: Verificar en el Admin que el stock disminuyÃ³
             inventory.navigate()
             stock_after = inventory.get_product_stock_from_table(PRODUCT_ID)
             assert stock_after == stock_initial - 1, \
-                f"Stock no decrementó correctamente. Esperado: {stock_initial - 1}, Obtenido: {stock_after}"
+                f"Stock no decrementÃ³ correctamente. Esperado: {stock_initial - 1}, Obtenido: {stock_after}"
 
         finally:
             store_driver.quit()
 
     def test_cp03_orden_aparece_en_confirmacion(self, driver, reset_db):
         """
-        CP03: Verificar que la página de confirmación muestra el número de pedido.
+        CP03: Verificar que la pÃ¡gina de confirmaciÃ³n muestra el nÃºmero de pedido.
         """
         store = StoreProductPage(driver)
         store.navigate(1)
@@ -98,7 +100,7 @@ class TestCP03_FlujoCompraCompleto:
         cart = StoreCartPage(driver)
         cart.navigate()
         cart.complete_checkout(
-            name='Ana García',
+            name='Ana GarcÃ­a',
             email='ana@test.com',
             address='Jr. Lima 456, Ayacucho'
         )
@@ -107,21 +109,21 @@ class TestCP03_FlujoCompraCompleto:
         assert order_id.startswith('Pedido #'), \
             f"Formato de ID de pedido incorrecto: {order_id}"
 
-        # Verificar nombre del cliente en la confirmación
+        # Verificar nombre del cliente en la confirmaciÃ³n
         customer = cart.get_order_customer_name()
-        assert 'Ana García' in customer, \
-            f"Nombre del cliente incorrecto en confirmación: {customer}"
+        assert 'Ana GarcÃ­a' in customer, \
+            f"Nombre del cliente incorrecto en confirmaciÃ³n: {customer}"
 
 
-# ════════════════════════════════════════════════════════════════════════════
-# CP04: Persistencia de sesión entre browsers
-# ════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# CP04: Persistencia de sesiÃ³n entre browsers
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 @pytest.mark.grid
 class TestCP04_PersistenciaSesion:
     """
     CP04: Verificar que el carrito persiste al cambiar de Chrome a Firefox.
-    Simula: iniciar en Chrome → cerrar → abrir en Firefox → carrito tiene los mismos items.
+    Simula: iniciar en Chrome â†’ cerrar â†’ abrir en Firefox â†’ carrito tiene los mismos items.
     """
 
     def test_cp04_carrito_persiste_entre_browsers(self, two_browsers, reset_db):
@@ -132,23 +134,30 @@ class TestCP04_PersistenciaSesion:
         chrome_driver, firefox_driver = two_browsers
         PRODUCT_ID = 2  # Smartphone
 
-        # ── CHROME: Agregar producto al carrito ──────────────────────────────
+        # â”€â”€ CHROME: Agregar producto al carrito â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         store_chrome = StoreProductPage(chrome_driver)
         store_chrome.navigate(PRODUCT_ID)
-        store_chrome.add_to_cart()
-
-        # Esperar feedback de agregado
-        from selenium.webdriver.support.ui import WebDriverWait
-        from selenium.webdriver.support import expected_conditions as EC
-        from selenium.webdriver.common.by import By
-        WebDriverWait(chrome_driver, 10).until(
-            EC.text_to_be_present_in_element(
-                (By.ID, 'btn-add-to-cart'), '¡Agregado!'
-            )
+        add_resp = chrome_driver.execute_async_script(
+            """
+            const done = arguments[arguments.length - 1];
+            fetch('/api/cart/add', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({product_id: arguments[0], qty: 1})
+            })
+            .then(r => r.json())
+            .then(done)
+            .catch(() => done({success: false}));
+            """,
+            PRODUCT_ID
         )
+        assert add_resp and add_resp.get('success'), f"No se pudo agregar al carrito: {add_resp}"
+
+        from selenium.webdriver.support.ui import WebDriverWait
+        from selenium.webdriver.common.by import By
 
         # Obtener el session_id del carrito de Chrome
-        chrome_driver.get(f"{SUT_BASE_URL}/api/cart/session-id")
+        chrome_driver.get(f"{BROWSER_BASE_URL}/api/cart/session-id")
         import json
 
         def _get_session_id(drv):
@@ -164,11 +173,11 @@ class TestCP04_PersistenciaSesion:
         )
         assert session_id, "No se pudo obtener el session_id del carrito de Chrome"
 
-        # ── CERRAR Chrome (simulado al dejar de usarlo) ──────────────────────
+        # â”€â”€ CERRAR Chrome (simulado al dejar de usarlo) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         # En el test, simplemente verificamos con Firefox usando el session_id
 
-        # ── FIREFOX: Restaurar carrito con el session_id ─────────────────────
-        # Llamar al endpoint de restauración
+        # â”€â”€ FIREFOX: Restaurar carrito con el session_id â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        # Llamar al endpoint de restauraciÃ³n
         response = requests.post(
             f"{SUT_BASE_URL}/api/cart/restore/{session_id}",
             timeout=5
@@ -176,19 +185,19 @@ class TestCP04_PersistenciaSesion:
         assert response.status_code == 200, \
             f"Error al restaurar el carrito: {response.text}"
         cart_data = response.json()
-        assert cart_data.get('success'), "La restauración del carrito falló"
+        assert cart_data.get('success'), "La restauraciÃ³n del carrito fallÃ³"
 
         items = cart_data.get('items', [])
-        assert len(items) > 0, "El carrito restaurado está vacío"
+        assert len(items) > 0, "El carrito restaurado estÃ¡ vacÃ­o"
 
         product_ids_in_cart = [item['product_id'] for item in items]
         assert PRODUCT_ID in product_ids_in_cart, \
             f"Producto {PRODUCT_ID} no encontrado en el carrito restaurado. Items: {items}"
 
-        # ── FIREFOX: Navegar al carrito (con sesión restaurada) ──────────────
-        # Inyectar el session_id en la sesión de Firefox
-        firefox_driver.get(f"{SUT_BASE_URL}/store")
-        # Restaurar vía API
+        # â”€â”€ FIREFOX: Navegar al carrito (con sesiÃ³n restaurada) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        # Inyectar el session_id en la sesiÃ³n de Firefox
+        firefox_driver.get(f"{BROWSER_BASE_URL}/store")
+        # Restaurar vÃ­a API
         firefox_driver.execute_script(f"""
             fetch('/api/cart/restore/{session_id}', {{method: 'POST'}})
                 .then(r => r.json());
@@ -198,27 +207,27 @@ class TestCP04_PersistenciaSesion:
         cart_firefox = StoreCartPage(firefox_driver)
         cart_firefox.navigate()
 
-        # VALIDACIÓN: El producto está en el carrito de Firefox
-        # (Puede que la sesión no se transfiera directamente, pero la API lo confirma)
-        # La prueba principal ya está validada con la respuesta de la API
+        # VALIDACIÃ“N: El producto estÃ¡ en el carrito de Firefox
+        # (Puede que la sesiÃ³n no se transfiera directamente, pero la API lo confirma)
+        # La prueba principal ya estÃ¡ validada con la respuesta de la API
         assert len(items) > 0, \
             "El carrito debe persistir entre browsers usando el session_id"
 
 
-# ════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 # CP05: Prueba de Concurrencia
-# ════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 @pytest.mark.concurrent
 class TestCP05_Concurrencia:
     """
-    CP05: Dos hilos de Selenium intentando comprar la última unidad simultáneamente.
-    Solo uno debe tener éxito (el otro debe recibir error de stock insuficiente).
+    CP05: Dos hilos de Selenium intentando comprar la Ãºltima unidad simultÃ¡neamente.
+    Solo uno debe tener Ã©xito (el otro debe recibir error de stock insuficiente).
     """
 
     def test_cp05_un_solo_ganador_con_ultimo_stock(self, reset_db):
         """
-        CP05: Con stock=1, dos compradores simultáneos.
+        CP05: Con stock=1, dos compradores simultÃ¡neos.
         Exactamente 1 debe completar la compra y 1 debe fallar.
         """
         PRODUCT_ID = 1
@@ -236,7 +245,7 @@ class TestCP05_Concurrencia:
         setup_resp = requests.get(f"{SUT_BASE_URL}/api/admin/product/{PRODUCT_ID}", timeout=5)
         product_data = setup_resp.json()
 
-        # Si el stock ya es bajo, establecerlo a 1 vía la sesión admin
+        # Si el stock ya es bajo, establecerlo a 1 vÃ­a la sesiÃ³n admin
         admin_session = requests.Session()
         # Login del admin
         admin_session.post(
@@ -277,10 +286,10 @@ class TestCP05_Concurrencia:
 
                 # Intentar checkout
                 try:
-                    cart.fill_checkout_form(buyer_name, buyer_email, 'Dirección Test')
+                    cart.fill_checkout_form(buyer_name, buyer_email, 'DirecciÃ³n Test')
                     cart.navigate()
                     cart.proceed_to_checkout()
-                    cart.fill_checkout_form(buyer_name, buyer_email, 'Dirección Test')
+                    cart.fill_checkout_form(buyer_name, buyer_email, 'DirecciÃ³n Test')
                     cart.confirm_order()
 
                     # Verificar resultado
@@ -311,7 +320,7 @@ class TestCP05_Concurrencia:
                 if driver:
                     driver.quit()
 
-        # Lanzar dos hilos simultáneos
+        # Lanzar dos hilos simultÃ¡neos
         thread1 = threading.Thread(
             target=attempt_purchase,
             args=('Comprador Uno', 'comprador1@test.com')
@@ -326,21 +335,21 @@ class TestCP05_Concurrencia:
         thread1.join(timeout=60)
         thread2.join(timeout=60)
 
-        # VALIDACIÓN PRINCIPAL: exactamente 1 éxito
+        # VALIDACIÃ“N PRINCIPAL: exactamente 1 Ã©xito
         total = results['success_count'] + results['fail_count']
         assert total == 2, f"Se esperaban 2 intentos, se obtuvieron {total}"
 
         # Al menos 1 debe haber fallado (no pueden ganar los dos con stock=1)
         assert results['success_count'] <= 1, \
-            f"¡Ambos compradores tuvieron éxito con solo 1 unidad! (Race condition detectada)"
+            f"Â¡Ambos compradores tuvieron Ã©xito con solo 1 unidad! (Race condition detectada)"
 
-        # Verificar stock final vía API
+        # Verificar stock final vÃ­a API
         final_resp = requests.get(
             f"{SUT_BASE_URL}/api/admin/product/{PRODUCT_ID}", timeout=5
         )
         final_stock = final_resp.json().get('stock', -1)
         assert final_stock >= 0, f"Stock final negativo: {final_stock}"
-        assert final_stock <= 1, f"Stock no decrementó correctamente: {final_stock}"
+        assert final_stock <= 1, f"Stock no decrementÃ³ correctamente: {final_stock}"
 
     def test_cp05_stock_no_negativo(self, reset_db):
         """
@@ -353,7 +362,7 @@ class TestCP05_Concurrencia:
         purchase_lock = threading.Lock()
 
         def quick_purchase(session_num: int):
-            """Compra rápida vía API."""
+            """Compra rÃ¡pida vÃ­a API."""
             s = requests.Session()
             s.post(f"{SUT_BASE_URL}/admin/login",
                    data={'username': 'admin', 'password': 'admin123'})
@@ -372,24 +381,24 @@ class TestCP05_Concurrencia:
         for t in threads:
             t.join(timeout=30)
 
-        # Verificar que el stock no quedó negativo
+        # Verificar que el stock no quedÃ³ negativo
         final_resp = requests.get(
             f"{SUT_BASE_URL}/api/admin/product/{PRODUCT_ID}", timeout=5
         )
         final_stock = final_resp.json().get('stock', -1)
         assert final_stock >= 0, \
-            f"¡El stock llegó a negativo! Stock final: {final_stock}"
+            f"Â¡El stock llegÃ³ a negativo! Stock final: {final_stock}"
 
 
-# ════════════════════════════════════════════════════════════════════════════
-# CP12: WebSocket — Stock se actualiza sin recargar la página
-# ════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# CP12: WebSocket â€” Stock se actualiza sin recargar la pÃ¡gina
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 @pytest.mark.realtime
 class TestCP12_WebSocketRealTime:
     """
-    CP12: Verificar que el stock en la tienda se actualiza automáticamente
-    cuando el Admin lo modifica, sin recargar la página (WebSocket).
+    CP12: Verificar que el stock en la tienda se actualiza automÃ¡ticamente
+    cuando el Admin lo modifica, sin recargar la pÃ¡gina (WebSocket).
     Implementa la Regla de Oro #1.
     """
 
@@ -398,40 +407,41 @@ class TestCP12_WebSocketRealTime:
         CP12 + Regla de Oro #1:
         1. Abrir producto en la Tienda.
         2. Establecer stock=0 desde Admin.
-        3. En la Tienda, el botón DEBE cambiar a 'Sin Stock' SIN recargar.
+        3. En la Tienda, el botÃ³n DEBE cambiar a 'Sin Stock' SIN recargar.
         """
         PRODUCT_ID = 1
 
         # Abrir la tienda con un driver separado
         store_driver = DriverFactory.get_driver(browser='chrome', remote=False, headless=True)
         try:
-            # PASO 1: Abrir la página del producto en la tienda
+            # PASO 1: Abrir la pÃ¡gina del producto en la tienda
             product_page = StoreProductPage(store_driver)
             product_page.navigate(PRODUCT_ID)
 
-            # Verificar que el botón está disponible inicialmente
+            # Verificar que el botÃ³n estÃ¡ disponible inicialmente
             initial_text = product_page.get_add_to_cart_text()
-            assert 'Añadir al Carrito' in initial_text, \
+            assert 'AÃ±adir al Carrito' in initial_text, \
                 f"Estado inicial inesperado: {initial_text}"
             assert product_page.is_add_to_cart_enabled(), \
-                "El botón debe estar habilitado inicialmente"
+                "El botÃ³n debe estar habilitado inicialmente"
 
             # PASO 2: Desde Admin, establecer stock=0
             inventory = AdminInventoryPage(admin_driver)
             inventory.navigate()
             inventory.set_stock(PRODUCT_ID, 0)
-            inventory.wait_for_toast_message()  # Confirmar que Admin guardó
+            inventory.wait_for_toast_message()  # Confirmar que Admin guardÃ³
 
-            # PASO 3: En la Tienda, esperar que el botón cambie SIN recargar
-            # Regla de Oro #1 — todo sin time.sleep()
+            # PASO 3: En la Tienda, esperar que el botÃ³n cambie SIN recargar
+            # Regla de Oro #1 â€” todo sin time.sleep()
             product_page.wait_for_out_of_stock(timeout=20)
 
             # VALIDACIONES finales
             final_text = product_page.get_add_to_cart_text()
             assert 'Sin Stock' in final_text, \
-                f"El botón debe decir 'Sin Stock'. Dice: {final_text}"
+                f"El botÃ³n debe decir 'Sin Stock'. Dice: {final_text}"
             assert not product_page.is_add_to_cart_enabled(), \
-                "El botón DEBE estar deshabilitado cuando stock=0 (Regla de Oro #1)"
+                "El botÃ³n DEBE estar deshabilitado cuando stock=0 (Regla de Oro #1)"
 
         finally:
             store_driver.quit()
+

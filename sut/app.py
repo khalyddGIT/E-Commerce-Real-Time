@@ -1,22 +1,27 @@
-"""
-Aplicación principal del SUT NexoShop.
+﻿"""
+Aplicación principal del SUT Yapa Shop.
 Flask + Flask-SocketIO con actualizaciones de inventario en tiempo real.
 """
 import os
 import csv
 import io
 import json
+import re
+import unicodedata
 import logging
 import secrets
 import threading
+import requests
+from urllib.parse import urlparse, urljoin
 from datetime import datetime, timedelta
 from flask import (Flask, render_template, request, jsonify,
                    redirect, url_for, session, flash, Response)
 from flask_socketio import SocketIO, emit
 from sqlalchemy import or_, func
+from werkzeug.utils import secure_filename
 from models import db, Product, Order, CartSession, AuditLog, seed_initial_data
 
-# ─── Configuración ──────────────────────────────────────────────────────────
+# â”€â”€â”€ ConfiguraciÃ³n â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
 app = Flask(__name__)
@@ -24,6 +29,7 @@ app.config['SECRET_KEY'] = 'ecommerce-realtime-secret-2024'
 app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(BASE_DIR, 'ecommerce.db')}"
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB upload max
+app.json.ensure_ascii = False  # Respetar tildes y ñ en respuestas JSON
 
 # Credenciales del Admin (hardcoded para el SUT)
 ADMIN_USERS = {
@@ -50,6 +56,7 @@ APP_METRICS = {
     'login_success_total': 0,
     'login_failed_total': 0
 }
+ALLOWED_IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp', 'gif', 'avif'}
 
 db.init_app(app)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
@@ -108,8 +115,114 @@ def inject_session_context():
     return {
         'csrf_token': ensure_csrf_token(),
         'admin_role': current_admin_role(),
-        'admin_user': current_admin_user()
+        'admin_user': current_admin_user(),
+        'product_image_src': product_image_src,
+        'product_image_proxy_src': product_image_proxy_src
     }
+
+
+def _normalize_external_url(raw_url: str) -> str:
+    """Normaliza URLs externas para intentar soportar distintos formatos pegados por usuario."""
+    if not raw_url:
+        return ''
+
+    value = raw_url.strip()
+    if not value:
+        return ''
+
+    if value.startswith('//'):
+        return f'https:{value}'
+
+    parsed = urlparse(value)
+    if not parsed.scheme:
+        return f'https://{value}'
+
+    return value
+
+
+def _extract_image_candidate(page_url: str, html_text: str) -> str:
+    """
+    Intenta encontrar una imagen en una página HTML (og:image, twitter:image o primer <img>).
+    """
+    if not html_text:
+        return ''
+
+    patterns = [
+        r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)["\']',
+        r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:image["\']',
+        r'<meta[^>]+name=["\']twitter:image["\'][^>]+content=["\']([^"\']+)["\']',
+        r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+name=["\']twitter:image["\']',
+        r'<img[^>]+src=["\']([^"\']+)["\']'
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, html_text, flags=re.IGNORECASE)
+        if match:
+            candidate = (match.group(1) or '').strip()
+            if candidate:
+                return urljoin(page_url, candidate)
+
+    return ''
+
+
+def product_image_src(raw_url: str) -> str:
+    """Retorna URL directa normalizada para el frontend."""
+    if not raw_url:
+        return ''
+
+    value = _normalize_external_url(raw_url)
+    if not value:
+        return ''
+
+    if value.startswith('data:') or value.startswith('/'):
+        return value
+
+    parsed = urlparse(value)
+    if parsed.scheme in ('http', 'https'):
+        return value
+
+    return value
+
+
+def product_image_proxy_src(raw_url: str) -> str:
+    """Retorna URL de proxy para fallback de imágenes."""
+    value = _normalize_external_url(raw_url)
+    if not value:
+        return ''
+    parsed = urlparse(value)
+    if parsed.scheme in ('http', 'https'):
+        return url_for('media_product_image', src=value)
+    return value
+
+
+def default_product_image_url(name: str, category: str, sku: str) -> str:
+    """Genera una imagen estable por producto cuando no se proporciona URL."""
+    raw = f"{category or ''}-{name or ''}-{sku or ''}".lower()
+    normalized = unicodedata.normalize('NFKD', raw).encode('ascii', 'ignore').decode('ascii')
+    seed = re.sub(r'[^a-z0-9]+', '-', normalized).strip('-') or 'producto'
+    return f'https://picsum.photos/seed/{seed}/900/700'
+
+
+def save_uploaded_product_image(file_storage) -> str:
+    """Guarda imagen subida por admin y retorna ruta pública local."""
+    if not file_storage or not getattr(file_storage, 'filename', ''):
+        return ''
+
+    original_name = secure_filename(file_storage.filename)
+    if not original_name:
+        raise ValueError('Nombre de archivo de imagen invalido.')
+
+    ext = os.path.splitext(original_name)[1].lower().lstrip('.')
+    if ext not in ALLOWED_IMAGE_EXTENSIONS:
+        raise ValueError('Formato de imagen no permitido. Usa: png, jpg, jpeg, webp, gif o avif.')
+
+    upload_dir = os.path.join(BASE_DIR, 'static', 'uploads', 'products')
+    os.makedirs(upload_dir, exist_ok=True)
+
+    unique_name = f"{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{secrets.token_hex(4)}.{ext}"
+    full_path = os.path.join(upload_dir, unique_name)
+    file_storage.save(full_path)
+    return f'/static/uploads/products/{unique_name}'
 
 
 @app.before_request
@@ -137,7 +250,12 @@ def set_security_headers(response):
     response.headers['X-Frame-Options'] = 'SAMEORIGIN'
     response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
     response.headers['X-XSS-Protection'] = '1; mode=block'
-    csp = "default-src 'self' https: data: 'unsafe-inline' 'unsafe-eval'"
+    # Permite cargar imágenes externas http/https para los productos editados
+    # sin abrir demasiado el resto de recursos.
+    csp = (
+        "default-src 'self' https: data: 'unsafe-inline' 'unsafe-eval'; "
+        "img-src 'self' https: http: data: blob:"
+    )
     response.headers['Content-Security-Policy'] = csp
     return response
 
@@ -159,15 +277,15 @@ def log_audit(action, entity_type='system', entity_id='', details=None):
         db.session.rollback()
         app.logger.warning(f'No se pudo registrar auditoria: {exc}')
 
-# ─── Init DB ────────────────────────────────────────────────────────────────
+# â”€â”€â”€ Init DB â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 with app.app_context():
     db.create_all()
     seed_initial_data(app)
 
 
-# ═══════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 # HELPER: emitir actualización de stock a todos los clientes conectados
-# ═══════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 def broadcast_stock_update(product_id, new_stock, product_sku):
     """Emite evento WebSocket a todos los clientes con el nuevo stock."""
     socketio.emit('stock_update', {
@@ -188,17 +306,17 @@ def send_email_mock(to_email, subject, body):
     app.logger.info(f'[EMAIL MOCK] To={to_email} Subject="{subject}" Body="{body}"')
 
 
-# ═══════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 # RUTAS GENERALES
-# ═══════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 @app.route('/')
 def index():
     return redirect(url_for('store_home'))
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# ADMIN — Autenticación
-# ═══════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# ADMIN â€” Autenticación
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 @app.route('/admin/login', methods=['GET', 'POST'])
 def admin_login():
     client_ip = request.remote_addr or 'unknown'
@@ -250,9 +368,9 @@ def admin_logout():
     return redirect(url_for('admin_login'))
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# ADMIN — Dashboard e Inventario
-# ═══════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# ADMIN â€” Dashboard e Inventario
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 @app.route('/admin')
 @admin_required('dashboard')
 def admin_dashboard():
@@ -562,6 +680,24 @@ def admin_add_product():
             flash('El nombre del producto es obligatorio.', 'error')
             return redirect(url_for('admin_add_product'))
 
+        image_url_input = request.form.get('image_url', '').strip()
+        image_file = request.files.get('image_file')
+        try:
+            uploaded_image_url = save_uploaded_product_image(image_file) if image_file and image_file.filename else ''
+        except ValueError as exc:
+            flash(str(exc), 'error')
+            return redirect(url_for('admin_add_product'))
+
+        final_image_url = (
+            uploaded_image_url
+            or image_url_input
+            or default_product_image_url(
+                name=name,
+                category=request.form.get('category', 'General'),
+                sku=sku
+            )
+        )
+
         product = Product(
             sku=sku,
             name=name,
@@ -569,7 +705,7 @@ def admin_add_product():
             price=price,
             stock=stock,
             description=request.form.get('description', ''),
-            image_url=request.form.get('image_url', '')
+            image_url=final_image_url
         )
         db.session.add(product)
         db.session.commit()
@@ -578,6 +714,86 @@ def admin_add_product():
         flash(f'Producto "{product.name}" agregado correctamente.', 'success')
         return redirect(url_for('admin_inventory'))
     return render_template('admin/add_product.html')
+
+
+@app.route('/admin/inventory/edit-product/<int:product_id>', methods=['GET', 'POST'])
+@admin_required('inventory_edit')
+def admin_edit_product(product_id):
+    """Editar los datos generales de un producto."""
+    product = Product.query.get_or_404(product_id)
+
+    if request.method == 'POST':
+        sku = request.form.get('sku', '').strip()
+        name = request.form.get('name', '').strip()
+        category = request.form.get('category', 'General').strip()
+        description = request.form.get('description', '').strip()
+        image_url_input = request.form.get('image_url', '').strip()
+        image_file = request.files.get('image_file')
+
+        if not sku:
+            flash('El SKU es obligatorio.', 'error')
+            return redirect(url_for('admin_edit_product', product_id=product.id))
+
+        if not name:
+            flash('El nombre del producto es obligatorio.', 'error')
+            return redirect(url_for('admin_edit_product', product_id=product.id))
+
+        existing = Product.query.filter(Product.sku == sku, Product.id != product.id).first()
+        if existing:
+            flash('El SKU ya existe en otro producto.', 'error')
+            return redirect(url_for('admin_edit_product', product_id=product.id))
+
+        try:
+            price = float(request.form.get('price', 0))
+            stock = int(request.form.get('stock', 0))
+        except ValueError:
+            flash('Precio o stock invalido.', 'error')
+            return redirect(url_for('admin_edit_product', product_id=product.id))
+
+        if price < 0 or stock < 0:
+            flash('Precio y stock deben ser mayores o iguales a 0.', 'error')
+            return redirect(url_for('admin_edit_product', product_id=product.id))
+
+        try:
+            uploaded_image_url = save_uploaded_product_image(image_file) if image_file and image_file.filename else ''
+        except ValueError as exc:
+            flash(str(exc), 'error')
+            return redirect(url_for('admin_edit_product', product_id=product.id))
+
+        old_snapshot = {
+            'sku': product.sku,
+            'name': product.name,
+            'category': product.category,
+            'price': product.price,
+            'stock': product.stock
+        }
+
+        product.sku = sku
+        product.name = name
+        product.category = category or 'General'
+        product.price = price
+        product.stock = stock
+        product.description = description
+        product.image_url = (
+            uploaded_image_url
+            or image_url_input
+            or product.image_url
+            or default_product_image_url(name=name, category=category, sku=sku)
+        )
+        product.updated_at = datetime.utcnow()
+        db.session.commit()
+
+        broadcast_stock_update(product.id, product.stock, product.sku)
+        log_audit(
+            'product_updated',
+            'product',
+            product.id,
+            {'before': old_snapshot, 'after': {'sku': product.sku, 'name': product.name, 'category': product.category, 'price': product.price, 'stock': product.stock}}
+        )
+        flash(f'Producto "{product.name}" actualizado correctamente.', 'success')
+        return redirect(url_for('admin_inventory'))
+
+    return render_template('admin/edit_product.html', product=product)
 
 
 @app.route('/admin/inventory/edit/<int:product_id>', methods=['POST'])
@@ -619,9 +835,9 @@ def admin_delete_product(product_id):
     return redirect(url_for('admin_inventory'))
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# ADMIN — Carga masiva CSV (CP01)
-# ═══════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# ADMIN â€” Carga masiva CSV (CP01)
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 @app.route('/admin/upload-csv', methods=['GET', 'POST'])
 @admin_required('inventory_edit')
 def admin_upload_csv():
@@ -738,9 +954,9 @@ def admin_observability():
     return render_template('admin/observability.html', metrics=APP_METRICS, recent_audit=recent_audit)
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# ADMIN — API REST para los tests
-# ═══════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# ADMIN â€” API REST para los tests
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 @app.route('/api/admin/products', methods=['GET'])
 def api_admin_products():
     """Lista de productos (sin auth para simplificar tests)."""
@@ -770,7 +986,7 @@ def api_v1_openapi():
     spec = {
         'openapi': '3.0.3',
         'info': {
-            'title': 'NexoShop API',
+            'title': 'Yapa Shop API',
             'version': '1.0.0'
         },
         'paths': {
@@ -827,9 +1043,9 @@ def api_v1_metrics():
     return jsonify({'data': snapshot})
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# STORE — Tienda
-# ═══════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# STORE â€” Tienda
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 @app.route('/store')
 def store_home():
     category = request.args.get('category', '')
@@ -847,6 +1063,91 @@ def store_home():
                            categories=categories,
                            current_category=category,
                            search_query=search)
+
+
+@app.route('/media/product-image')
+def media_product_image():
+    """Proxy flexible de imágenes externas (incluye URLs de páginas que contienen imagen)."""
+    src = request.args.get('src', '')
+    if not src:
+        return Response('Missing src', status=400)
+
+    normalized_src = _normalize_external_url(src)
+    parsed = urlparse(normalized_src)
+    if parsed.scheme not in ('http', 'https'):
+        return Response('Invalid scheme', status=400)
+
+    default_headers = {'User-Agent': 'YapaShopImageProxy/1.0'}
+    browser_like_headers = {
+        'User-Agent': (
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+            'AppleWebKit/537.36 (KHTML, like Gecko) '
+            'Chrome/122.0.0.0 Safari/537.36'
+        ),
+        'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
+        'Referer': f'{parsed.scheme}://{parsed.netloc}/'
+    }
+
+    try:
+        upstream = requests.get(
+            normalized_src,
+            timeout=10,
+            allow_redirects=True,
+            stream=True,
+            headers=default_headers
+        )
+    except requests.RequestException:
+        upstream = None
+
+    if not upstream or upstream.status_code != 200:
+        try:
+            upstream = requests.get(
+                normalized_src,
+                timeout=10,
+                allow_redirects=True,
+                stream=True,
+                headers=browser_like_headers
+            )
+        except requests.RequestException:
+            upstream = None
+
+    if not upstream or upstream.status_code != 200:
+        fallback_svg = (
+            "<svg xmlns='http://www.w3.org/2000/svg' width='1200' height='800'>"
+            "<rect width='100%' height='100%' fill='#0f1a21'/>"
+            "<text x='50%' y='50%' text-anchor='middle' fill='#9fb2c1' "
+            "font-family='Arial, sans-serif' font-size='28'>Imagen no disponible</text>"
+            "</svg>"
+        )
+        return Response(fallback_svg, mimetype='image/svg+xml')
+
+    content_type = (upstream.headers.get('Content-Type') or '').lower()
+    payload = upstream.content
+
+    if 'image' in content_type:
+        return Response(payload, mimetype=content_type.split(';')[0])
+
+    # Si no es imagen directa pero sí HTML, intentar extraer URL de imagen embebida.
+    if 'text/html' in content_type or '<html' in payload[:3000].decode('utf-8', errors='ignore').lower():
+        html_text = payload.decode('utf-8', errors='ignore')
+        candidate = _extract_image_candidate(upstream.url or normalized_src, html_text)
+        if candidate:
+            try:
+                upstream_img = requests.get(
+                    candidate,
+                    timeout=10,
+                    allow_redirects=True,
+                    stream=True,
+                    headers={'User-Agent': 'YapaShopImageProxy/1.0'}
+                )
+                if upstream_img.status_code == 200:
+                    image_type = (upstream_img.headers.get('Content-Type') or '').lower()
+                    if 'image' in image_type:
+                        return Response(upstream_img.content, mimetype=image_type.split(';')[0])
+            except requests.RequestException:
+                pass
+
+    return Response('No se pudo obtener una imagen valida desde esa URL', status=415)
 
 
 @app.route('/store/product/<int:product_id>')
@@ -875,6 +1176,41 @@ def store_cart():
     return render_template('store/cart.html', items=items_detail, total=total)
 
 
+@app.route('/store/cart/remove/<int:product_id>', methods=['POST'])
+def store_cart_remove(product_id):
+    """Eliminar un producto específico del carrito."""
+    session_id = session.get('cart_session_id', '')
+    cart = CartSession.query.filter_by(session_id=session_id).first()
+
+    if not cart or not cart.items:
+        flash('El carrito está vacío.', 'warning')
+        return redirect(url_for('store_cart'))
+
+    previous_items = list(cart.items)
+    filtered_items = []
+    removed = False
+
+    for item in previous_items:
+        try:
+            item_product_id = int(item.get('product_id', 0))
+        except (TypeError, ValueError):
+            item_product_id = 0
+
+        if item_product_id == product_id:
+            removed = True
+            continue
+        filtered_items.append(item)
+
+    if removed:
+        cart.items = filtered_items
+        db.session.commit()
+        flash('Producto eliminado del carrito.', 'success')
+    else:
+        flash('El producto no estaba en tu carrito.', 'warning')
+
+    return redirect(url_for('store_cart'))
+
+
 @app.route('/store/checkout', methods=['GET', 'POST'])
 def store_checkout():
     session_id = session.get('cart_session_id', '')
@@ -901,7 +1237,7 @@ def store_checkout():
                     success = False
                     break
                 if qty <= 0:
-                    errors.append(f'Cantidad inválida para "{p.name}"')
+                    errors.append(f'Cantidad invÃ¡lida para "{p.name}"')
                     success = False
                     break
                 if p.stock < qty:
@@ -989,9 +1325,9 @@ def store_order_success(order_id):
     return render_template('store/order_success.html', order=order, receipt_code=receipt_code)
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# STORE — API Cart (AJAX)
-# ═══════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# STORE â€” API Cart (AJAX)
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 @app.route('/api/cart/add', methods=['POST'])
 def api_cart_add():
     """Agregar producto al carrito via AJAX."""
@@ -1095,9 +1431,9 @@ def api_cart_restore(session_id):
     return jsonify({'success': True, 'items': cart.items})
 
 
-# ═══════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 # WebSocket Events
-# ═══════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 @socketio.on('connect')
 def handle_connect():
     emit('connected', {'message': 'Conectado al servidor de tiempo real'})
@@ -1117,17 +1453,19 @@ def handle_request_stock(data):
         })
 
 
-# ═══════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 # MAIN
-# ═══════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 if __name__ == '__main__':
     print("=" * 60)
-    print("  NexoShop SUT")
+    print("  Yapa Shop SUT")
     print("  Admin: http://localhost:5000/admin/login")
     print("  Store: http://localhost:5000/store")
     print("  Grid UI: http://localhost:4444")
     print("=" * 60)
     socketio.run(app, host='0.0.0.0', port=5000, debug=True, allow_unsafe_werkzeug=True)
+
+
 
 
 

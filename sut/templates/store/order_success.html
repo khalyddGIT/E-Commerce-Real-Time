@@ -3,19 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pedido Confirmado - NexoShop</title>
+    <title>Pedido Confirmado - Yapa Shop</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body class="store-page">
     <header class="store-header">
         <div class="header-inner">
-            <a href="{{ url_for('store_home') }}" class="store-logo">NexoShop</a>
+            <a href="{{ url_for('store_home') }}" class="store-logo">Yapa Shop</a>
         </div>
     </header>
 
     <main class="success-page">
         <div class="success-container" id="order-success-container">
-            <div class="success-icon">✅</div>
+            <div class="success-icon">Pedido listo</div>
             <h1 id="order-success-title">¡Pedido Confirmado!</h1>
             <p class="order-id" id="order-id">Pedido #{{ order.id }}</p>
             <p class="order-id">Comprobante: <strong>{{ receipt_code }}</strong></p>
@@ -37,12 +37,8 @@
             </div>
 
             <div class="success-actions">
-                <a href="{{ url_for('store_home') }}" class="btn btn-primary" id="btn-continue-shopping">
-                    Seguir Comprando
-                </a>
-                <a href="{{ url_for('admin_inventory') }}" class="btn btn-secondary" id="btn-go-admin">
-                    Ver Admin
-                </a>
+                <a href="{{ url_for('store_home') }}" class="btn btn-primary" id="btn-continue-shopping">Seguir Comprando</a>
+                <a href="{{ url_for('admin_inventory') }}" class="btn btn-secondary" id="btn-go-admin">Ver Admin</a>
             </div>
         </div>
     </main>

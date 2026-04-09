@@ -1,25 +1,34 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mi Carrito - NexoShop</title>
+    <title>Mi Carrito - Yapa Shop</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body class="store-page">
     <header class="store-header">
         <div class="header-inner">
-            <a href="{{ url_for('store_home') }}" class="store-logo">NexoShop</a>
+            <a href="{{ url_for('store_home') }}" class="store-logo">Yapa Shop</a>
             <div class="header-right">
                 <a href="{{ url_for('store_cart') }}" class="cart-btn active" id="btn-cart">
-                    🛒 <span id="cart-count">{{ items|sum(attribute='qty') }}</span>
+                    Carrito <span id="cart-count">{{ items|sum(attribute='qty') }}</span>
                 </a>
             </div>
         </div>
     </header>
 
     <main class="cart-page">
-        <h1>Mi Carrito de Compras</h1>
+        <div class="cart-head">
+            <h1>Mi Carrito de Compras</h1>
+            <p>{{ items|sum(attribute='qty') if items else 0 }} producto(s) agregado(s)</p>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endwith %}
 
         {% if items %}
         <div class="cart-content">
@@ -28,55 +37,81 @@
                 <div class="cart-item" id="cart-item-{{ item.product.id }}">
                     <div class="cart-item-image">
                         {% if item.product.image_url %}
-                            <img src="{{ item.product.image_url }}" alt="{{ item.product.name }}">
+                            <img src="{{ product_image_src(item.product.image_url) }}"
+                                 data-proxy-src="{{ product_image_proxy_src(item.product.image_url) }}"
+                                 alt="{{ item.product.name }}"
+                                 class="remote-image">
                         {% else %}
-                            <div class="image-placeholder-sm">📦</div>
+                            <div class="image-placeholder-sm">Producto</div>
                         {% endif %}
                     </div>
+
                     <div class="cart-item-details">
                         <h3 id="cart-item-name-{{ item.product.id }}">{{ item.product.name }}</h3>
+                        <div class="cart-item-meta">
+                            <span class="cart-meta-pill">{{ item.product.category }}</span>
+                            <span class="cart-meta-pill">Cantidad: {{ item.qty }}</span>
+                        </div>
                         <p class="cart-item-sku">SKU: {{ item.product.sku }}</p>
                         <p class="cart-item-price">S/ {{ "%.2f"|format(item.product.price) }} x {{ item.qty }}</p>
                     </div>
+
                     <div class="cart-item-subtotal" id="cart-item-subtotal-{{ item.product.id }}">
                         S/ {{ "%.2f"|format(item.subtotal) }}
+                        <form method="POST" action="{{ url_for('store_cart_remove', product_id=item.product.id) }}" class="cart-item-remove-form">
+                            <button type="submit" class="btn btn-danger btn-sm" id="btn-remove-cart-{{ item.product.id }}">
+                                Eliminar
+                            </button>
+                        </form>
                     </div>
                 </div>
                 {% endfor %}
             </div>
 
-            <div class="cart-summary">
+            <aside class="cart-summary">
                 <h2>Resumen del Pedido</h2>
+                <p class="cart-summary-note">Revisa tus productos antes de continuar al pago.</p>
+
                 <div class="summary-row">
                     <span>Subtotal:</span>
                     <span id="cart-total">S/ {{ "%.2f"|format(total) }}</span>
                 </div>
                 <div class="summary-row">
-                    <span>Envío:</span>
+                    <span>Envio:</span>
                     <span>Gratis</span>
                 </div>
                 <div class="summary-row total-row">
                     <span>Total:</span>
                     <span id="cart-grand-total">S/ {{ "%.2f"|format(total) }}</span>
                 </div>
+
                 <a href="{{ url_for('store_checkout') }}" class="btn btn-primary btn-full" id="btn-proceed-checkout">
-                    Proceder al Pago →
+                    Proceder al Pago
                 </a>
                 <a href="{{ url_for('store_home') }}" class="btn btn-secondary btn-full" id="btn-continue-shopping">
-                    ← Seguir Comprando
+                    Seguir Comprando
                 </a>
-            </div>
+            </aside>
         </div>
         {% else %}
         <div class="empty-cart" id="empty-cart-message">
-            <div class="empty-cart-icon">🛒</div>
-            <h2>Tu carrito está vacío</h2>
+            <div class="empty-cart-icon">Carrito</div>
+            <h2>Tu carrito esta vacio</h2>
             <p>Agrega productos para comenzar tu compra</p>
-            <a href="{{ url_for('store_home') }}" class="btn btn-primary" id="btn-go-shopping">
-                Ir a la Tienda
-            </a>
+            <a href="{{ url_for('store_home') }}" class="btn btn-primary" id="btn-go-shopping">Ir a la Tienda</a>
         </div>
         {% endif %}
     </main>
+    <script>
+        document.querySelectorAll('img.remote-image').forEach((img) => {
+            img.addEventListener('error', function () {
+                const proxySrc = this.getAttribute('data-proxy-src');
+                if (proxySrc && this.src !== proxySrc) {
+                    this.src = proxySrc;
+                }
+            }, { once: true });
+        });
+    </script>
 </body>
 </html>
+

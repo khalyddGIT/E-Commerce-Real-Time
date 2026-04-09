@@ -17,7 +17,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-BASE_URL = "http://localhost:5000"
+BASE_URL = os.getenv("BROWSER_BASE_URL", "http://localhost:5000")
 DEFAULT_TIMEOUT = 15
 
 

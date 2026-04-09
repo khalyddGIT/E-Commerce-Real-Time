@@ -1,47 +1,45 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ product.name }} - NexoShop</title>
+    <title>{{ product.name }} - Yapa Shop</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 </head>
 <body class="store-page">
     <header class="store-header">
         <div class="header-inner">
-            <a href="{{ url_for('store_home') }}" class="store-logo">NexoShop</a>
+            <a href="{{ url_for('store_home') }}" class="store-logo">Yapa Shop</a>
             <div class="header-right">
                 <a href="{{ url_for('store_cart') }}" class="cart-btn" id="btn-cart">
-                    🛒 <span id="cart-count">0</span>
+                    Carrito <span id="cart-count">0</span>
                 </a>
             </div>
         </div>
     </header>
 
     <main class="product-detail-page">
-        <a href="{{ url_for('store_home') }}" class="breadcrumb" id="breadcrumb-home">← Volver a la tienda</a>
-
+        <a href="{{ url_for('store_home') }}" class="breadcrumb" id="breadcrumb-home">â† Volver a la tienda</a>
         <div class="product-detail-container">
             <div class="product-detail-image">
                 {% if product.image_url %}
-                    <img src="{{ product.image_url }}" alt="{{ product.name }}" id="product-main-image">
+                    <img src="{{ product_image_src(product.image_url) }}"
+                         data-proxy-src="{{ product_image_proxy_src(product.image_url) }}"
+                         alt="{{ product.name }}"
+                         id="product-main-image"
+                         class="remote-image">
                 {% else %}
-                    <div class="image-placeholder-large">📦</div>
+                    <div class="image-placeholder-large">Producto</div>
                 {% endif %}
             </div>
-
             <div class="product-detail-info">
                 <span class="product-category-tag" id="product-category">{{ product.category }}</span>
                 <h1 class="product-detail-name" id="product-name">{{ product.name }}</h1>
                 <p class="product-sku" id="product-sku">SKU: {{ product.sku }}</p>
                 <p class="product-description" id="product-description">{{ product.description }}</p>
+                <div class="product-detail-price" id="product-price">S/ {{ "%.2f"|format(product.price) }}</div>
 
-                <div class="product-detail-price" id="product-price">
-                    S/ {{ "%.2f"|format(product.price) }}
-                </div>
-
-                <!-- Stock en tiempo real - CRÍTICO para CP05 y Regla de Oro #1 -->
                 <div class="stock-realtime-container">
                     <div class="stock-counter" id="stock-display">
                         <span class="stock-label">Disponibilidad:</span>
@@ -50,30 +48,27 @@
                     </div>
                     <div class="stock-status" id="stock-status-text">
                         {% if product.stock > 0 %}
-                            <span class="status-available">✅ En Stock</span>
+                            <span class="status-available">En stock</span>
                         {% else %}
-                            <span class="status-outofstock">❌ Agotado</span>
+                            <span class="status-outofstock">Agotado</span>
                         {% endif %}
                     </div>
                 </div>
 
                 <div class="add-to-cart-container">
                     <div class="qty-selector">
-                        <button onclick="changeQty(-1)" id="btn-qty-decrease">−</button>
+                        <button onclick="changeQty(-1)" id="btn-qty-decrease">-</button>
                         <input type="number" id="qty-input" value="1" min="1"
                                max="{{ product.stock }}" {% if product.stock == 0 %}disabled{% endif %}>
                         <button onclick="changeQty(1)" id="btn-qty-increase">+</button>
                     </div>
-
-                    <!-- BOTÓN CRÍTICO: Regla de Oro #1 -->
-                    <!-- Cambia a "Sin Stock" y se deshabilita vía WebSocket cuando stock llega a 0 -->
                     <button class="btn-add-to-cart-detail
                             {% if product.stock == 0 %}btn-out-of-stock{% else %}btn-available{% endif %}"
                             id="btn-add-to-cart"
                             data-product-id="{{ product.id }}"
                             {% if product.stock == 0 %}disabled{% endif %}
                             onclick="addToCartDetail()">
-                        {% if product.stock == 0 %}Sin Stock{% else %}Añadir al Carrito{% endif %}
+                        {% if product.stock == 0 %}Sin Stock{% else %}AÃ±adir al carrito{% endif %}
                     </button>
                 </div>
 
@@ -83,13 +78,23 @@
     </main>
 
     <div id="toast-container" class="toast-container"></div>
-
     <script>
         const PRODUCT_ID = {{ product.id }};
         const PRODUCT_SKU = "{{ product.sku }}";
         const CURRENT_STOCK = {{ product.stock }};
     </script>
-    <script src="{{ url_for('static', filename='js/product_detail.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/product_detail.js', v='20260409-fix-detailjs') }}"></script>
     <script src="{{ url_for('static', filename='js/store.js') }}"></script>
+    <script>
+        document.querySelectorAll('img.remote-image').forEach((img) => {
+            img.addEventListener('error', function () {
+                const proxySrc = this.getAttribute('data-proxy-src');
+                if (proxySrc && this.src !== proxySrc) {
+                    this.src = proxySrc;
+                }
+            }, { once: true });
+        });
+    </script>
 </body>
 </html>
+

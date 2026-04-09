@@ -1,21 +1,26 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Observabilidad - Admin NexoShop</title>
+    <title>Observabilidad - Admin Yapa Shop</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body class="admin-page">
-    <aside class="sidebar">
-        <div class="sidebar-logo"><span>NexoShop</span> Admin</div>
+    <div class="mobile-topbar">
+        <button type="button" class="mobile-menu-btn" id="sidebar-toggle" aria-label="Abrir menu" aria-expanded="false">&#9776;</button>
+        <span class="mobile-topbar-brand">Yapa Shop Admin</span>
+    </div>
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <aside class="sidebar" id="admin-sidebar">
+        <div class="sidebar-logo"><span>Yapa Shop</span> Admin</div>
         <nav class="sidebar-nav">
-            <a href="{{ url_for('admin_dashboard_view') }}" class="nav-item">🏠 Dashboard</a>
-            <a href="{{ url_for('admin_inventory') }}" class="nav-item">📦 Inventario</a>
-            <a href="{{ url_for('admin_sales') }}" class="nav-item">🧾 Ventas</a>
-            <a href="{{ url_for('admin_reports') }}" class="nav-item">📈 Reportes</a>
-            <a href="{{ url_for('admin_observability') }}" class="nav-item active">🩺 Observabilidad</a>
-            <a href="{{ url_for('admin_logout') }}" class="nav-item nav-logout">🚪 Salir</a>
+            <a href="{{ url_for('admin_dashboard_view') }}" class="nav-item">Dashboard</a>
+            <a href="{{ url_for('admin_inventory') }}" class="nav-item">Inventario</a>
+            <a href="{{ url_for('admin_sales') }}" class="nav-item">Ventas</a>
+            <a href="{{ url_for('admin_reports') }}" class="nav-item">Reportes</a>
+            <a href="{{ url_for('admin_observability') }}" class="nav-item active">Observabilidad</a>
+            <a href="{{ url_for('admin_logout') }}" class="nav-item nav-logout">Salir</a>
         </nav>
     </aside>
 
@@ -29,45 +34,55 @@
 
         <div class="card">
             <h2>Métricas</h2>
-            <table class="data-table">
-                <thead><tr><th>Métrica</th><th>Valor</th></tr></thead>
-                <tbody>
-                    {% for key, value in metrics.items() %}
-                    <tr><td>{{ key }}</td><td>{{ value }}</td></tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+            <div class="table-wrap">
+                <table class="data-table">
+                    <thead><tr><th>Métrica</th><th>Valor</th></tr></thead>
+                    <tbody>
+                        {% for key, value in metrics.items() %}
+                        <tr><td>{{ key }}</td><td>{{ value }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         <div class="card">
             <h2>Auditoría reciente</h2>
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th>Fecha</th>
-                        <th>Usuario</th>
-                        <th>Rol</th>
-                        <th>Acción</th>
-                        <th>Entidad</th>
-                        <th>Detalle</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for row in recent_audit %}
-                    <tr>
-                        <td>{{ row.created_at.strftime('%d/%m/%Y %H:%M:%S') if row.created_at else '-' }}</td>
-                        <td>{{ row.user_name }}</td>
-                        <td>{{ row.user_role }}</td>
-                        <td>{{ row.action }}</td>
-                        <td>{{ row.entity_type }} #{{ row.entity_id }}</td>
-                        <td>{{ row.details_json }}</td>
-                    </tr>
-                    {% else %}
-                    <tr><td colspan="6" class="empty-state">Sin eventos de auditoría.</td></tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+            <div class="table-wrap">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Usuario</th>
+                            <th>Rol</th>
+                            <th>Acción</th>
+                            <th>Entidad</th>
+                            <th>Detalle</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in recent_audit %}
+                        <tr>
+                            <td>{{ row.created_at.strftime('%d/%m/%Y %H:%M:%S') if row.created_at else '-' }}</td>
+                            <td>{{ row.user_name }}</td>
+                            <td>{{ row.user_role }}</td>
+                            <td>{{ row.action }}</td>
+                            <td>{{ row.entity_type }} #{{ row.entity_id }}</td>
+                            <td>{{ row.details_json }}</td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="6" class="empty-state">Sin eventos de auditoría.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         </div>
     </main>
+    <script src="{{ url_for('static', filename='js/admin.js') }}"></script>
 </body>
 </html>
+
+
+
+
+
