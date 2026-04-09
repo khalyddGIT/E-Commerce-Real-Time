@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pedido Confirmado - NexoShop</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="store-page">
+    <header class="store-header">
+        <div class="header-inner">
+            <a href="{{ url_for('store_home') }}" class="store-logo">NexoShop</a>
+        </div>
+    </header>
+
+    <main class="success-page">
+        <div class="success-container" id="order-success-container">
+            <div class="success-icon">✅</div>
+            <h1 id="order-success-title">¡Pedido Confirmado!</h1>
+            <p class="order-id" id="order-id">Pedido #{{ order.id }}</p>
+            <p>Gracias, <strong id="customer-name">{{ order.customer_name }}</strong>.</p>
+            <p>Te enviaremos una confirmación a <strong id="customer-email">{{ order.customer_email }}</strong></p>
+
+            <div class="order-summary" id="order-summary">
+                <h2>Resumen</h2>
+                {% for item in order.items %}
+                <div class="order-item">
+                    <span>{{ item.product_name }} x{{ item.qty }}</span>
+                    <span>S/ {{ "%.2f"|format(item.price * item.qty) }}</span>
+                </div>
+                {% endfor %}
+                <div class="order-total">
+                    <strong>Total: S/ {{ "%.2f"|format(order.total) }}</strong>
+                </div>
+            </div>
+
+            <div class="success-actions">
+                <a href="{{ url_for('store_home') }}" class="btn btn-primary" id="btn-continue-shopping">
+                    Seguir Comprando
+                </a>
+                <a href="{{ url_for('admin_inventory') }}" class="btn btn-secondary" id="btn-go-admin">
+                    Ver Admin
+                </a>
+            </div>
+        </div>
+    </main>
+</body>
+</html>

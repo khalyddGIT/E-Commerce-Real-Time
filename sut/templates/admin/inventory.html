@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inventario - Admin NexoShop</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="admin-page">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="sidebar-logo">
+            <span>NexoShop</span> Admin
+        </div>
+        <nav class="sidebar-nav">
+            <a href="{{ url_for('admin_inventory') }}" class="nav-item active" id="nav-inventory">
+                📦 Inventario
+            </a>
+            <a href="{{ url_for('admin_sales') }}" class="nav-item" id="nav-sales">
+                🧾 Ventas
+            </a>
+            <a href="{{ url_for('admin_upload_csv') }}" class="nav-item" id="nav-upload-csv">
+                📊 Cargar CSV
+            </a>
+            <a href="{{ url_for('store_home') }}" class="nav-item" target="_blank" id="nav-view-store">
+                🛍️ Ver Tienda
+            </a>
+            <a href="{{ url_for('admin_logout') }}" class="nav-item nav-logout" id="nav-logout">
+                🚪 Salir
+            </a>
+        </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <header class="page-header">
+            <div>
+                <h1>Gestión de Inventario</h1>
+                <p>{{ products|length }} producto(s) registrado(s)</p>
+            </div>
+            <div class="header-actions">
+                <a href="{{ url_for('admin_upload_csv') }}" class="btn btn-secondary" id="btn-go-upload-csv">
+                    📊 Cargar CSV
+                </a>
+                <a href="{{ url_for('admin_sales') }}" class="btn btn-secondary" id="btn-go-sales">
+                    🧾 Ver Ventas
+                </a>
+                <a href="{{ url_for('admin_add_product') }}" class="btn btn-primary" id="btn-add-product">
+                    + Agregar Producto
+                </a>
+            </div>
+        </header>
+
+        <!-- Flash messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }} toast-notification" id="toast-{{ loop.index }}">
+                    {{ message }}
+                </div>
+            {% endfor %}
+        {% endwith %}
+
+        <!-- Tabla de Inventario -->
+        <div class="card">
+            <table class="data-table" id="inventory-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>SKU</th>
+                        <th>Nombre</th>
+                        <th>Categoría</th>
+                        <th>Precio</th>
+                        <th>Stock</th>
+                        <th>Estado</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody id="inventory-tbody">
+                    {% for product in products %}
+                    <tr id="product-row-{{ product.id }}" data-product-id="{{ product.id }}">
+                        <td>{{ product.id }}</td>
+                        <td class="sku-cell" id="sku-{{ product.sku }}">{{ product.sku }}</td>
+                        <td>{{ product.name }}</td>
+                        <td>{{ product.category }}</td>
+                        <td>S/ {{ "%.2f"|format(product.price) }}</td>
+                        <td>
+                            <div class="stock-editor" id="stock-editor-{{ product.id }}">
+                                <input type="number" class="stock-input"
+                                       id="stock-input-{{ product.id }}"
+                                       value="{{ product.stock }}"
+                                       min="0" style="width:70px">
+                                <button class="btn btn-sm btn-success"
+                                        id="btn-save-stock-{{ product.id }}"
+                                        onclick="updateStock({{ product.id }}, '{{ product.name }}')">
+                                    Guardar
+                                </button>
+                            </div>
+                        </td>
+                        <td>
+                            <span class="stock-badge {% if product.stock == 0 %}badge-danger{% elif product.stock < 5 %}badge-warning{% else %}badge-success{% endif %}"
+                                  id="stock-badge-{{ product.id }}">
+                                {% if product.stock == 0 %}Sin Stock{% elif product.stock < 5 %}Stock Bajo{% else %}Disponible{% endif %}
+                            </span>
+                        </td>
+                        <td>
+                            <form method="POST" action="{{ url_for('admin_delete_product', product_id=product.id) }}"
+                                  style="display:inline"
+                                  onsubmit="return confirm('¿Eliminar este producto?')">
+                                <button type="submit" class="btn btn-sm btn-danger"
+                                        id="btn-delete-{{ product.id }}">
+                                    Eliminar
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr id="empty-row">
+                        <td colspan="8" class="empty-state">
+                            No hay productos registrados. <a href="{{ url_for('admin_upload_csv') }}">Cargar CSV</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </main>
+
+    <!-- Toast Container -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <script src="{{ url_for('static', filename='js/admin.js') }}"></script>
+</body>
+</html>

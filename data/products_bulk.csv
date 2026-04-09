@@ -1,0 +1,11 @@
+sku,name,category,price,stock,description,image_url
+BULK-AA001,Tablet ProMax 11,Electrónica,799.99,20,Tablet de alta gama con pantalla AMOLED,https://picsum.photos/seed/tablet/400/300
+BULK-AA002,Audífonos Noise Cancel,Electrónica,299.99,35,Audífonos con cancelación de ruido activa,https://picsum.photos/seed/headphones/400/300
+BULK-AA003,Zapatillas Running X,Deportes,149.99,50,Zapatillas profesionales para corredores,https://picsum.photos/seed/shoes/400/300
+BULK-AA004,Cafetera Espresso Pro,Hogar,389.99,12,Cafetera automática con molinillo integrado,https://picsum.photos/seed/coffee/400/300
+BULK-AA005,Mochila Urban 30L,Ropa,89.99,60,Mochila urbana resistente al agua,https://picsum.photos/seed/backpack/400/300
+BULK-AA006,Monitor 4K IPS 27",Electrónica,549.99,8,Monitor profesional con panel IPS 4K,https://picsum.photos/seed/monitor/400/300
+BULK-AA007,Teclado Mecánico RGB,Electrónica,189.99,25,Teclado mecánico con retroiluminación RGB,https://picsum.photos/seed/keyboard/400/300
+BULK-AA008,Silla Escritorio Pro,Muebles,449.99,10,Silla ergonómica ajustable para escritorio,https://picsum.photos/seed/desk/400/300
+BULK-AA009,Libro Python IA 2024,Libros,79.99,40,Programación de Inteligencia Artificial con Python,https://picsum.photos/seed/pybook/400/300
+BULK-AA010,Smartwatch Fit Pro,Electrónica,249.99,30,Smartwatch con monitor cardíaco y GPS,https://picsum.photos/seed/watch/400/300

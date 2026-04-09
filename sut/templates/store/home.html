@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tienda - NexoShop</title>
+    <meta name="description" content="Tienda online con inventario en tiempo real. Compra productos con actualización instantánea de stock.">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+</head>
+<body class="store-page">
+    <!-- Header -->
+    <header class="store-header">
+        <div class="header-inner">
+            <a href="{{ url_for('store_home') }}" class="store-logo" id="store-logo">
+                NexoShop
+            </a>
+            <nav class="store-nav">
+                <a href="{{ url_for('store_home') }}" class="nav-link" id="nav-home">Inicio</a>
+                {% for cat in categories %}
+                    <a href="{{ url_for('store_home', category=cat) }}"
+                       class="nav-link {% if current_category == cat %}active{% endif %}"
+                       id="nav-cat-{{ cat|lower|replace(' ', '-') }}">
+                        {{ cat }}
+                    </a>
+                {% endfor %}
+            </nav>
+            <div class="header-right">
+                <form method="GET" action="{{ url_for('store_home') }}" class="search-form" id="search-form">
+                    <input type="text" name="search" id="search-input"
+                           placeholder="Buscar productos..." value="{{ search_query }}">
+                    <button type="submit" id="btn-search">🔍</button>
+                </form>
+                <a href="{{ url_for('store_cart') }}" class="cart-btn" id="btn-cart">
+                    🛒 <span id="cart-count">0</span>
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <!-- Hero -->
+    <section class="store-hero">
+        <h1>Tecnología & Estilo</h1>
+        <p>Los mejores productos con actualización de stock en tiempo real</p>
+        <span class="rt-badge" id="realtime-status">🟢 Tiempo Real Activo</span>
+    </section>
+
+    <!-- Flash messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, message in messages %}
+            <div class="alert alert-{{ category }}">{{ message }}</div>
+        {% endfor %}
+    {% endwith %}
+
+    <!-- Product Grid -->
+    <main class="store-main">
+        <div class="products-grid" id="products-grid">
+            {% for product in products %}
+            <article class="product-card" id="product-card-{{ product.id }}"
+                     data-product-id="{{ product.id }}"
+                     data-sku="{{ product.sku }}"
+                     data-stock="{{ product.stock }}">
+                <a href="{{ url_for('store_product_detail', product_id=product.id) }}" class="product-link">
+                    {% if product.image_url %}
+                        <img src="{{ product.image_url }}" alt="{{ product.name }}"
+                             class="product-image" loading="lazy">
+                    {% else %}
+                        <div class="product-image-placeholder">📦</div>
+                    {% endif %}
+                </a>
+                <div class="product-info">
+                    <span class="product-category">{{ product.category }}</span>
+                    <h2 class="product-name">
+                        <a href="{{ url_for('store_product_detail', product_id=product.id) }}">
+                            {{ product.name }}
+                        </a>
+                    </h2>
+                    <div class="product-stock-info">
+                        <span class="stock-indicator" id="stock-indicator-{{ product.id }}">
+                            {% if product.stock > 0 %}
+                                ✅ {{ product.stock }} en stock
+                            {% else %}
+                                ❌ Sin stock
+                            {% endif %}
+                        </span>
+                    </div>
+                    <div class="product-footer">
+                        <span class="product-price">S/ {{ "%.2f"|format(product.price) }}</span>
+                        <button class="btn-add-to-cart
+                                {% if product.stock == 0 %}btn-out-of-stock{% else %}btn-available{% endif %}"
+                                id="btn-add-to-cart-{{ product.id }}"
+                                data-product-id="{{ product.id }}"
+                                {% if product.stock == 0 %}disabled{% endif %}
+                                onclick="addToCart(this.dataset.productId)">
+                            {% if product.stock == 0 %}Sin Stock{% else %}Añadir al Carrito{% endif %}
+                        </button>
+                    </div>
+                </div>
+            </article>
+            {% else %}
+            <div class="empty-products" id="empty-products-message">
+                <p>No se encontraron productos.</p>
+            </div>
+            {% endfor %}
+        </div>
+    </main>
+
+    <!-- Toast -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <script src="{{ url_for('static', filename='js/store.js') }}"></script>
+</body>
+</html>

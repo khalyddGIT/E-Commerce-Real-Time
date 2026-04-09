@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mi Carrito - NexoShop</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="store-page">
+    <header class="store-header">
+        <div class="header-inner">
+            <a href="{{ url_for('store_home') }}" class="store-logo">NexoShop</a>
+            <div class="header-right">
+                <a href="{{ url_for('store_cart') }}" class="cart-btn active" id="btn-cart">
+                    🛒 <span id="cart-count">{{ items|sum(attribute='qty') }}</span>
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <main class="cart-page">
+        <h1>Mi Carrito de Compras</h1>
+
+        {% if items %}
+        <div class="cart-content">
+            <div class="cart-items" id="cart-items-list">
+                {% for item in items %}
+                <div class="cart-item" id="cart-item-{{ item.product.id }}">
+                    <div class="cart-item-image">
+                        {% if item.product.image_url %}
+                            <img src="{{ item.product.image_url }}" alt="{{ item.product.name }}">
+                        {% else %}
+                            <div class="image-placeholder-sm">📦</div>
+                        {% endif %}
+                    </div>
+                    <div class="cart-item-details">
+                        <h3 id="cart-item-name-{{ item.product.id }}">{{ item.product.name }}</h3>
+                        <p class="cart-item-sku">SKU: {{ item.product.sku }}</p>
+                        <p class="cart-item-price">S/ {{ "%.2f"|format(item.product.price) }} x {{ item.qty }}</p>
+                    </div>
+                    <div class="cart-item-subtotal" id="cart-item-subtotal-{{ item.product.id }}">
+                        S/ {{ "%.2f"|format(item.subtotal) }}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div class="cart-summary">
+                <h2>Resumen del Pedido</h2>
+                <div class="summary-row">
+                    <span>Subtotal:</span>
+                    <span id="cart-total">S/ {{ "%.2f"|format(total) }}</span>
+                </div>
+                <div class="summary-row">
+                    <span>Envío:</span>
+                    <span>Gratis</span>
+                </div>
+                <div class="summary-row total-row">
+                    <span>Total:</span>
+                    <span id="cart-grand-total">S/ {{ "%.2f"|format(total) }}</span>
+                </div>
+                <a href="{{ url_for('store_checkout') }}" class="btn btn-primary btn-full" id="btn-proceed-checkout">
+                    Proceder al Pago →
+                </a>
+                <a href="{{ url_for('store_home') }}" class="btn btn-secondary btn-full" id="btn-continue-shopping">
+                    ← Seguir Comprando
+                </a>
+            </div>
+        </div>
+        {% else %}
+        <div class="empty-cart" id="empty-cart-message">
+            <div class="empty-cart-icon">🛒</div>
+            <h2>Tu carrito está vacío</h2>
+            <p>Agrega productos para comenzar tu compra</p>
+            <a href="{{ url_for('store_home') }}" class="btn btn-primary" id="btn-go-shopping">
+                Ir a la Tienda
+            </a>
+        </div>
+        {% endif %}
+    </main>
+</body>
+</html>

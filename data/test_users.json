@@ -1,0 +1,24 @@
+{
+  "admin": {
+    "username": "admin",
+    "password": "admin123",
+    "url": "/admin/login"
+  },
+  "test_customers": [
+    {
+      "name": "Juan Pérez García",
+      "email": "juan.perez@test.com",
+      "address": "Av. Grau 123, Ayacucho, Perú"
+    },
+    {
+      "name": "María López Ríos",
+      "email": "maria.lopez@test.com",
+      "address": "Jr. Lima 456, Huamanga, Ayacucho"
+    },
+    {
+      "name": "Carlos Ruiz Torres",
+      "email": "carlos.ruiz@test.com",
+      "address": "Calle Real 789, Lima, Perú"
+    }
+  ]
+}

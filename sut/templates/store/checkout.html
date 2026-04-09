@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Checkout - NexoShop</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="store-page">
+    <header class="store-header">
+        <div class="header-inner">
+            <a href="{{ url_for('store_home') }}" class="store-logo">NexoShop</a>
+        </div>
+    </header>
+
+    <main class="checkout-page">
+        <h1>Finalizar Compra</h1>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}" id="checkout-error">{{ message }}</div>
+            {% endfor %}
+        {% endwith %}
+
+        <div class="checkout-content">
+            <form method="POST" class="checkout-form" id="checkout-form">
+                <div class="checkout-section">
+                    <h2>Datos del Cliente</h2>
+                    <div class="form-group">
+                        <label for="name">Nombre Completo *</label>
+                        <input type="text" id="checkout-name" name="name" required
+                               placeholder="Juan Pérez">
+                    </div>
+                    <div class="form-group">
+                        <label for="email">Email *</label>
+                        <input type="email" id="checkout-email" name="email" required
+                               placeholder="juan@ejemplo.com">
+                    </div>
+                    <div class="form-group">
+                        <label for="address">Dirección de Envío *</label>
+                        <textarea id="checkout-address" name="address" required rows="3"
+                                  placeholder="Calle, número, ciudad, país"></textarea>
+                    </div>
+                </div>
+
+                <div class="checkout-section">
+                    <h2>Resumen del Pedido</h2>
+                    {% for item in items %}
+                    <div class="checkout-item" id="checkout-item-{{ item.product.id }}">
+                        <span>{{ item.product.name }} x{{ item.qty }}</span>
+                        <span>S/ {{ "%.2f"|format(item.subtotal) }}</span>
+                    </div>
+                    {% endfor %}
+                    <div class="checkout-total">
+                        <strong>Total: S/ {{ "%.2f"|format(total) }}</strong>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-full" id="btn-confirm-order">
+                    ✅ Confirmar Pedido
+                </button>
+            </form>
+        </div>
+    </main>
+</body>
+</html>
