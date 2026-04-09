@@ -18,6 +18,8 @@
             <div class="success-icon">✅</div>
             <h1 id="order-success-title">¡Pedido Confirmado!</h1>
             <p class="order-id" id="order-id">Pedido #{{ order.id }}</p>
+            <p class="order-id">Comprobante: <strong>{{ receipt_code }}</strong></p>
+            <p class="order-id">Pago: <strong>Aprobado (simulado)</strong></p>
             <p>Gracias, <strong id="customer-name">{{ order.customer_name }}</strong>.</p>
             <p>Te enviaremos una confirmación a <strong id="customer-email">{{ order.customer_email }}</strong></p>
 

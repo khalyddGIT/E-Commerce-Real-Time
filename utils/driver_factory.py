@@ -5,6 +5,7 @@ Fábrica de WebDrivers: soporta Chrome/Firefox local y Selenium Grid remoto.
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.webdriver.firefox.options import Options as FirefoxOptions
+import os
 
 
 # ─── Configuración ──────────────────────────────────────────────────────────
@@ -50,7 +51,9 @@ class DriverFactory:
         from selenium.webdriver.chrome.service import Service
         from webdriver_manager.chrome import ChromeDriverManager
         opts = cls._chrome_options(headless)
-        service = Service(ChromeDriverManager().install())
+        installed_path = ChromeDriverManager().install()
+        driver_path = cls._resolve_driver_binary(installed_path, ('chromedriver.exe', 'chromedriver'))
+        service = Service(driver_path)
         driver = webdriver.Chrome(service=service, options=opts)
         driver.set_page_load_timeout(PAGE_LOAD_TIMEOUT)
         return driver
@@ -61,7 +64,9 @@ class DriverFactory:
         from selenium.webdriver.firefox.service import Service
         from webdriver_manager.firefox import GeckoDriverManager
         opts = cls._firefox_options(headless)
-        service = Service(GeckoDriverManager().install())
+        installed_path = GeckoDriverManager().install()
+        driver_path = cls._resolve_driver_binary(installed_path, ('geckodriver.exe', 'geckodriver'))
+        service = Service(driver_path)
         driver = webdriver.Firefox(service=service, options=opts)
         driver.set_page_load_timeout(PAGE_LOAD_TIMEOUT)
         return driver
@@ -115,3 +120,23 @@ class DriverFactory:
                 return cls.get_local_firefox(headless)
             else:
                 raise ValueError(f"Browser no soportado: {browser}")
+    @staticmethod
+    def _resolve_driver_binary(candidate_path: str, expected_names: tuple[str, ...]) -> str:
+        """
+        Resuelve la ruta real del ejecutable del driver.
+        webdriver-manager en algunos entornos devuelve un archivo de notices en vez del binario.
+        """
+        if not candidate_path:
+            raise ValueError('Ruta de driver vacia')
+
+        filename = os.path.basename(candidate_path).lower()
+        if filename in expected_names:
+            return candidate_path
+
+        search_root = os.path.dirname(candidate_path)
+        for root, _, files in os.walk(search_root):
+            for f in files:
+                if f.lower() in expected_names:
+                    return os.path.join(root, f)
+
+        raise FileNotFoundError(f'No se encontro ejecutable del driver en {search_root}')

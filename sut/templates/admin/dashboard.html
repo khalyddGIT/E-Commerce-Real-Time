@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Admin NexoShop</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="admin-page">
+    <aside class="sidebar">
+        <div class="sidebar-logo"><span>NexoShop</span> Admin</div>
+        <nav class="sidebar-nav">
+            <a href="{{ url_for('admin_dashboard_view') }}" class="nav-item active">🏠 Dashboard</a>
+            <a href="{{ url_for('admin_inventory') }}" class="nav-item">📦 Inventario</a>
+            <a href="{{ url_for('admin_sales') }}" class="nav-item">🧾 Ventas</a>
+            <a href="{{ url_for('admin_reports') }}" class="nav-item">📈 Reportes</a>
+            {% if admin_role == 'admin' %}
+            <a href="{{ url_for('admin_observability') }}" class="nav-item">🩺 Observabilidad</a>
+            {% endif %}
+            {% if admin_role in ['admin', 'operator'] %}
+            <a href="{{ url_for('admin_upload_csv') }}" class="nav-item">📊 Cargar CSV</a>
+            {% endif %}
+            <a href="{{ url_for('store_home') }}" class="nav-item" target="_blank">🛍️ Ver Tienda</a>
+            <a href="{{ url_for('admin_logout') }}" class="nav-item nav-logout">🚪 Salir</a>
+        </nav>
+    </aside>
+
+    <main class="main-content">
+        <header class="page-header">
+            <div>
+                <h1>Dashboard</h1>
+                <p>Resumen rápido de operación</p>
+            </div>
+        </header>
+
+        <div class="kpi-grid">
+            <div class="card"><h2>Productos</h2><p class="kpi-value">{{ total_products }}</p></div>
+            <div class="card"><h2>Stock crítico</h2><p class="kpi-value">{{ low_stock_count }}</p></div>
+            <div class="card"><h2>Órdenes hoy</h2><p class="kpi-value">{{ orders_today_count }}</p></div>
+            <div class="card"><h2>Ventas hoy</h2><p class="kpi-value">S/ {{ "%.2f"|format(confirmed_today_amount) }}</p></div>
+            <div class="card"><h2>Ventas confirmadas acumuladas</h2><p class="kpi-value">S/ {{ "%.2f"|format(total_confirmed_amount) }}</p></div>
+        </div>
+
+        <div class="card">
+            <h2>Últimas órdenes</h2>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Orden</th>
+                        <th>Fecha</th>
+                        <th>Cliente</th>
+                        <th>Total</th>
+                        <th>Estado</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for order in recent_orders %}
+                    <tr>
+                        <td>#{{ order.id }}</td>
+                        <td>{{ order.created_at.strftime('%d/%m/%Y %H:%M') if order.created_at else '-' }}</td>
+                        <td>{{ order.customer_name or '-' }}</td>
+                        <td>S/ {{ "%.2f"|format(order.total or 0) }}</td>
+                        <td>{{ order.status }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" class="empty-state">Sin órdenes recientes.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </main>
+</body>
+</html>

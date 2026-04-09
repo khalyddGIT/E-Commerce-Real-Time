@@ -8,7 +8,11 @@ import random
 import string
 from faker import Faker
 
-fake = Faker('es_PE')
+try:
+    fake = Faker('es_PE')
+except AttributeError:
+    # Fallback para entornos donde es_PE no esta disponible
+    fake = Faker('es_ES')
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
 CATEGORIES = ['Electrónica', 'Ropa', 'Libros', 'Muebles', 'Deportes', 'Hogar']

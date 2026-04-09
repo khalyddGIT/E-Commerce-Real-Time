@@ -35,7 +35,10 @@ function updateStock(productId, productName) {
 
     fetch(`/admin/inventory/edit/${productId}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-CSRF-Token': window.CSRF_TOKEN || ''
+        },
         body: `stock=${newStock}`
     })
     .then(r => r.json())

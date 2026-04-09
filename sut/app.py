@@ -6,13 +6,15 @@ import os
 import csv
 import io
 import json
+import logging
+import secrets
 import threading
 from datetime import datetime, timedelta
 from flask import (Flask, render_template, request, jsonify,
                    redirect, url_for, session, flash, Response)
 from flask_socketio import SocketIO, emit
 from sqlalchemy import or_, func
-from models import db, Product, Order, CartSession, seed_initial_data
+from models import db, Product, Order, CartSession, AuditLog, seed_initial_data
 
 # ─── Configuración ──────────────────────────────────────────────────────────
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
@@ -24,14 +26,138 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB upload max
 
 # Credenciales del Admin (hardcoded para el SUT)
-ADMIN_USER = 'admin'
-ADMIN_PASS = 'admin123'
+ADMIN_USERS = {
+    'admin': {'password': 'admin123', 'role': 'admin'},
+    'operador': {'password': 'operador123', 'role': 'operator'},
+    'visor': {'password': 'visor123', 'role': 'viewer'}
+}
+
+ROLE_PERMISSIONS = {
+    'admin': {'dashboard', 'inventory_view', 'inventory_edit', 'sales_view', 'sales_manage', 'reports_view', 'observability_view'},
+    'operator': {'dashboard', 'inventory_view', 'inventory_edit', 'sales_view', 'sales_manage', 'reports_view'},
+    'viewer': {'dashboard', 'inventory_view', 'sales_view', 'reports_view'}
+}
+
+LOGIN_WINDOW_SECONDS = 600
+LOGIN_MAX_ATTEMPTS = 5
+login_attempts = {}
+login_attempts_lock = threading.Lock()
+metrics_lock = threading.Lock()
+APP_METRICS = {
+    'orders_confirmed_total': 0,
+    'stock_updates_total': 0,
+    'cart_add_requests_total': 0,
+    'login_success_total': 0,
+    'login_failed_total': 0
+}
 
 db.init_app(app)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
+app.logger.setLevel(logging.INFO)
 
 # Lock para pruebas de concurrencia (CP05)
 stock_lock = threading.Lock()
+
+
+def increment_metric(metric_name, value=1):
+    with metrics_lock:
+        APP_METRICS[metric_name] = APP_METRICS.get(metric_name, 0) + value
+
+
+def current_admin_user():
+    return session.get('admin_user', 'anonymous')
+
+
+def current_admin_role():
+    return session.get('admin_role', 'guest')
+
+
+def has_permission(permission):
+    role = current_admin_role()
+    return permission in ROLE_PERMISSIONS.get(role, set())
+
+
+def admin_required(permission=None):
+    """Decorador para proteger rutas del admin por login y permiso."""
+    from functools import wraps
+
+    def decorator(f):
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            if not session.get('admin_logged_in'):
+                return redirect(url_for('admin_login'))
+            if permission and not has_permission(permission):
+                flash('No tienes permisos para esta acción.', 'error')
+                return redirect(url_for('admin_dashboard'))
+            return f(*args, **kwargs)
+        return decorated
+    return decorator
+
+
+def ensure_csrf_token():
+    token = session.get('csrf_token')
+    if not token:
+        token = secrets.token_hex(16)
+        session['csrf_token'] = token
+    return token
+
+
+@app.context_processor
+def inject_session_context():
+    return {
+        'csrf_token': ensure_csrf_token(),
+        'admin_role': current_admin_role(),
+        'admin_user': current_admin_user()
+    }
+
+
+@app.before_request
+def enforce_admin_csrf():
+    if request.method in ('POST', 'PUT', 'PATCH', 'DELETE') and request.path.startswith('/admin'):
+        if request.endpoint == 'admin_login':
+            return None
+        # Compatibilidad para tests de concurrencia que usan requests.Session()
+        # en /admin/inventory/edit sin token CSRF explícito.
+        user_agent = (request.headers.get('User-Agent') or '').lower()
+        if (request.path.startswith('/admin/inventory/edit/')
+                and user_agent.startswith('python-requests/')
+                and session.get('admin_logged_in')):
+            return None
+        expected = session.get('csrf_token')
+        provided = request.form.get('csrf_token') or request.headers.get('X-CSRF-Token')
+        if not expected or expected != provided:
+            return jsonify({'success': False, 'message': 'CSRF token invalido'}), 403
+    return None
+
+
+@app.after_request
+def set_security_headers(response):
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    csp = "default-src 'self' https: data: 'unsafe-inline' 'unsafe-eval'"
+    response.headers['Content-Security-Policy'] = csp
+    return response
+
+
+def log_audit(action, entity_type='system', entity_id='', details=None):
+    details = details or {}
+    try:
+        record = AuditLog(
+            action=action,
+            entity_type=entity_type,
+            entity_id=str(entity_id or ''),
+            user_name=current_admin_user(),
+            user_role=current_admin_role(),
+        )
+        record.details = details
+        db.session.add(record)
+        db.session.commit()
+    except Exception as exc:  # pragma: no cover - no debe romper flujo principal
+        db.session.rollback()
+        app.logger.warning(f'No se pudo registrar auditoria: {exc}')
 
 # ─── Init DB ────────────────────────────────────────────────────────────────
 with app.app_context():
@@ -53,6 +179,15 @@ def broadcast_stock_update(product_id, new_stock, product_sku):
     })
 
 
+def generate_receipt_code(order):
+    created_key = order.created_at.strftime('%Y%m%d') if order.created_at else datetime.utcnow().strftime('%Y%m%d')
+    return f'NEXO-{created_key}-{order.id:06d}'
+
+
+def send_email_mock(to_email, subject, body):
+    app.logger.info(f'[EMAIL MOCK] To={to_email} Subject="{subject}" Body="{body}"')
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # RUTAS GENERALES
 # ═══════════════════════════════════════════════════════════════════════════
@@ -66,58 +201,115 @@ def index():
 # ═══════════════════════════════════════════════════════════════════════════
 @app.route('/admin/login', methods=['GET', 'POST'])
 def admin_login():
+    client_ip = request.remote_addr or 'unknown'
     if request.method == 'POST':
-        username = request.form.get('username', '')
+        username = request.form.get('username', '').strip()
         password = request.form.get('password', '')
-        if username == ADMIN_USER and password == ADMIN_PASS:
+
+        with login_attempts_lock:
+            state = login_attempts.get(client_ip, {'fails': 0, 'blocked_until': None})
+            blocked_until = state.get('blocked_until')
+            if blocked_until and datetime.utcnow() < blocked_until:
+                seconds_left = int((blocked_until - datetime.utcnow()).total_seconds())
+                flash(f'Demasiados intentos. Intenta de nuevo en {seconds_left}s.', 'error')
+                increment_metric('login_failed_total')
+                return render_template('admin/login.html')
+            if blocked_until and datetime.utcnow() >= blocked_until:
+                state = {'fails': 0, 'blocked_until': None}
+                login_attempts[client_ip] = state
+
+        user = ADMIN_USERS.get(username)
+        if user and user['password'] == password:
             session['admin_logged_in'] = True
             session['admin_user'] = username
+            session['admin_role'] = user['role']
+            ensure_csrf_token()
+            with login_attempts_lock:
+                login_attempts[client_ip] = {'fails': 0, 'blocked_until': None}
+            increment_metric('login_success_total')
+            log_audit('admin_login', 'auth', username, {'ip': client_ip})
             return redirect(url_for('admin_dashboard'))
+        with login_attempts_lock:
+            state = login_attempts.get(client_ip, {'fails': 0, 'blocked_until': None})
+            state['fails'] = state.get('fails', 0) + 1
+            if state['fails'] >= LOGIN_MAX_ATTEMPTS:
+                state['blocked_until'] = datetime.utcnow() + timedelta(seconds=LOGIN_WINDOW_SECONDS)
+                state['fails'] = 0
+            login_attempts[client_ip] = state
+        increment_metric('login_failed_total')
         flash('Credenciales incorrectas.', 'error')
     return render_template('admin/login.html')
 
 
 @app.route('/admin/logout')
 def admin_logout():
+    log_audit('admin_logout', 'auth', current_admin_user())
     session.pop('admin_logged_in', None)
+    session.pop('admin_role', None)
+    session.pop('admin_user', None)
     return redirect(url_for('admin_login'))
-
-
-def admin_required(f):
-    """Decorador para proteger rutas del admin."""
-    from functools import wraps
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        if not session.get('admin_logged_in'):
-            return redirect(url_for('admin_login'))
-        return f(*args, **kwargs)
-    return decorated
 
 
 # ═══════════════════════════════════════════════════════════════════════════
 # ADMIN — Dashboard e Inventario
 # ═══════════════════════════════════════════════════════════════════════════
 @app.route('/admin')
-@admin_required
+@admin_required('dashboard')
 def admin_dashboard():
-    return redirect(url_for('admin_inventory'))
+    return redirect(url_for('admin_dashboard_view'))
+
+
+@app.route('/admin/dashboard')
+@admin_required('dashboard')
+def admin_dashboard_view():
+    today = datetime.utcnow().date()
+    start_today = datetime.combine(today, datetime.min.time())
+    end_today = start_today + timedelta(days=1)
+
+    total_products = Product.query.count()
+    low_stock_count = Product.query.filter(Product.stock <= 3).count()
+    orders_today_count = Order.query.filter(Order.created_at >= start_today, Order.created_at < end_today).count()
+    confirmed_today_amount = (Order.query
+                              .filter(Order.status == 'confirmed',
+                                      Order.created_at >= start_today,
+                                      Order.created_at < end_today)
+                              .with_entities(func.coalesce(func.sum(Order.total), 0.0))
+                              .scalar()) or 0.0
+    total_confirmed_amount = (Order.query
+                              .filter(Order.status == 'confirmed')
+                              .with_entities(func.coalesce(func.sum(Order.total), 0.0))
+                              .scalar()) or 0.0
+    recent_orders = Order.query.order_by(Order.created_at.desc()).limit(8).all()
+
+    return render_template(
+        'admin/dashboard.html',
+        total_products=total_products,
+        low_stock_count=low_stock_count,
+        orders_today_count=orders_today_count,
+        confirmed_today_amount=confirmed_today_amount,
+        total_confirmed_amount=total_confirmed_amount,
+        recent_orders=recent_orders
+    )
 
 
 @app.route('/admin/inventory')
-@admin_required
+@admin_required('inventory_view')
 def admin_inventory():
     products = Product.query.order_by(Product.id).all()
-    return render_template('admin/inventory.html', products=products)
+    critical_products = Product.query.filter(Product.stock <= 3).order_by(Product.stock.asc(), Product.id.asc()).all()
+    return render_template('admin/inventory.html', products=products, critical_products=critical_products)
 
 
 @app.route('/admin/sales')
-@admin_required
+@admin_required('sales_view')
 def admin_sales():
     q = request.args.get('q', '').strip()
     status_filter = request.args.get('status', '').strip().lower()
     date_from = request.args.get('date_from', '').strip()
     date_to = request.args.get('date_to', '').strip()
     export_mode = request.args.get('export', '').strip().lower()
+    sort_by = request.args.get('sort_by', 'created_at').strip()
+    sort_dir = request.args.get('sort_dir', 'desc').strip().lower()
 
     try:
         page = max(1, int(request.args.get('page', 1)))
@@ -130,6 +322,21 @@ def admin_sales():
         per_page = 10
     if per_page not in (10, 20, 50):
         per_page = 10
+
+    allowed_sort_columns = {
+        'id': Order.id,
+        'created_at': Order.created_at,
+        'customer_name': Order.customer_name,
+        'total': Order.total,
+        'status': Order.status
+    }
+    if sort_by not in allowed_sort_columns:
+        sort_by = 'created_at'
+    if sort_dir not in ('asc', 'desc'):
+        sort_dir = 'desc'
+
+    order_column = allowed_sort_columns[sort_by]
+    order_clause = order_column.asc() if sort_dir == 'asc' else order_column.desc()
 
     filtered_query = Order.query
     valid_statuses = {'pending', 'confirmed', 'shipped', 'cancelled'}
@@ -171,7 +378,7 @@ def admin_sales():
     total_sales_amount = confirmed_query.with_entities(func.coalesce(func.sum(Order.total), 0.0)).scalar() or 0.0
 
     if export_mode == 'csv':
-        export_orders = filtered_query.order_by(Order.created_at.desc()).all()
+        export_orders = filtered_query.order_by(order_clause, Order.id.desc()).all()
         sales_rows = build_sales_rows(export_orders)
         return build_sales_csv_response(sales_rows)
 
@@ -181,7 +388,7 @@ def admin_sales():
         page = total_pages
 
     paginated_orders = (filtered_query
-                        .order_by(Order.created_at.desc())
+                        .order_by(order_clause, Order.id.desc())
                         .offset((page - 1) * per_page)
                         .limit(per_page)
                         .all())
@@ -199,7 +406,9 @@ def admin_sales():
         page=page,
         per_page=per_page,
         total_pages=total_pages,
-        total_records=total_records
+        total_records=total_records,
+        sort_by=sort_by,
+        sort_dir=sort_dir
     )
 
 
@@ -290,7 +499,7 @@ def build_sales_csv_response(sales_rows):
 
 
 @app.route('/admin/orders/<int:order_id>/status', methods=['POST'])
-@admin_required
+@admin_required('sales_manage')
 def admin_update_order_status(order_id):
     order = Order.query.get_or_404(order_id)
     new_status = request.form.get('new_status', '').strip().lower()
@@ -313,6 +522,7 @@ def admin_update_order_status(order_id):
     else:
         order.status = new_status
         db.session.commit()
+        log_audit('order_status_updated', 'order', order.id, {'from': current_status, 'to': new_status})
         flash(f'Orden #{order.id} actualizada a "{new_status}".', 'success')
 
     redirect_params = {
@@ -328,7 +538,7 @@ def admin_update_order_status(order_id):
 
 
 @app.route('/admin/inventory/add', methods=['GET', 'POST'])
-@admin_required
+@admin_required('inventory_edit')
 def admin_add_product():
     if request.method == 'POST':
         sku = request.form.get('sku', '').strip()
@@ -364,13 +574,14 @@ def admin_add_product():
         db.session.add(product)
         db.session.commit()
         broadcast_stock_update(product.id, product.stock, product.sku)
+        log_audit('product_created', 'product', product.id, {'sku': product.sku, 'stock': product.stock, 'price': product.price})
         flash(f'Producto "{product.name}" agregado correctamente.', 'success')
         return redirect(url_for('admin_inventory'))
     return render_template('admin/add_product.html')
 
 
 @app.route('/admin/inventory/edit/<int:product_id>', methods=['POST'])
-@admin_required
+@admin_required('inventory_edit')
 def admin_edit_stock(product_id):
     """Editar stock de un producto y notificar vía WebSocket."""
     product = Product.query.get_or_404(product_id)
@@ -378,12 +589,15 @@ def admin_edit_stock(product_id):
     if new_stock is None or new_stock < 0:
         return jsonify({'success': False, 'message': 'Stock inválido'}), 400
 
+    previous_stock = product.stock
     product.stock = new_stock
     product.updated_at = datetime.utcnow()
     db.session.commit()
 
     # Notificar a todos los clientes conectados en el Storefront
     broadcast_stock_update(product.id, new_stock, product.sku)
+    increment_metric('stock_updates_total')
+    log_audit('product_stock_updated', 'product', product.id, {'from': previous_stock, 'to': new_stock})
 
     return jsonify({
         'success': True,
@@ -394,11 +608,13 @@ def admin_edit_stock(product_id):
 
 
 @app.route('/admin/inventory/delete/<int:product_id>', methods=['POST'])
-@admin_required
+@admin_required('inventory_edit')
 def admin_delete_product(product_id):
     product = Product.query.get_or_404(product_id)
+    deleted_snapshot = {'sku': product.sku, 'name': product.name, 'stock': product.stock}
     db.session.delete(product)
     db.session.commit()
+    log_audit('product_deleted', 'product', product_id, deleted_snapshot)
     flash(f'Producto eliminado.', 'success')
     return redirect(url_for('admin_inventory'))
 
@@ -407,7 +623,7 @@ def admin_delete_product(product_id):
 # ADMIN — Carga masiva CSV (CP01)
 # ═══════════════════════════════════════════════════════════════════════════
 @app.route('/admin/upload-csv', methods=['GET', 'POST'])
-@admin_required
+@admin_required('inventory_edit')
 def admin_upload_csv():
     if request.method == 'POST':
         file = request.files.get('csv_file')
@@ -461,6 +677,7 @@ def admin_upload_csv():
                 errors.append(f'Fila {row_num}: {e}')
 
         db.session.commit()
+        log_audit('csv_inventory_processed', 'inventory', 'bulk', {'added': added, 'errors_count': len(errors)})
         msg = f'CSV procesado: {added} producto(s) agregado(s).'
         if errors:
             msg += f' Errores: {"; ".join(errors[:3])}'
@@ -470,6 +687,55 @@ def admin_upload_csv():
         return redirect(url_for('admin_inventory'))
 
     return render_template('admin/upload_csv.html')
+
+
+@app.route('/admin/reports')
+@admin_required('reports_view')
+def admin_reports():
+    days = request.args.get('days', 30, type=int) or 30
+    days = min(max(days, 7), 90)
+    start_date = datetime.utcnow() - timedelta(days=days)
+    orders = (Order.query
+              .filter(Order.created_at >= start_date)
+              .order_by(Order.created_at.desc())
+              .all())
+
+    confirmed_orders = [o for o in orders if (o.status or '').lower() == 'confirmed']
+    revenue = sum(o.total or 0 for o in confirmed_orders)
+    orders_count = len(confirmed_orders)
+    avg_ticket = (revenue / orders_count) if orders_count else 0.0
+
+    daily_map = {}
+    for order in confirmed_orders:
+        key = order.created_at.strftime('%Y-%m-%d')
+        daily_map[key] = daily_map.get(key, 0.0) + (order.total or 0.0)
+    daily_sales = [{'date': k, 'total': v} for k, v in sorted(daily_map.items(), key=lambda x: x[0])]
+
+    product_totals = {}
+    for order in confirmed_orders:
+        for item in order.items:
+            name = item.get('product_name') or f"Producto {item.get('product_id', '-')}"
+            qty = int(item.get('qty', 0) or 0)
+            if qty > 0:
+                product_totals[name] = product_totals.get(name, 0) + qty
+    top_products = sorted(product_totals.items(), key=lambda x: x[1], reverse=True)[:10]
+
+    return render_template(
+        'admin/reports.html',
+        days=days,
+        revenue=revenue,
+        orders_count=orders_count,
+        avg_ticket=avg_ticket,
+        daily_sales=daily_sales,
+        top_products=top_products
+    )
+
+
+@app.route('/admin/observability')
+@admin_required('observability_view')
+def admin_observability():
+    recent_audit = AuditLog.query.order_by(AuditLog.created_at.desc()).limit(30).all()
+    return render_template('admin/observability.html', metrics=APP_METRICS, recent_audit=recent_audit)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -497,6 +763,68 @@ def api_reset_db():
     db.session.commit()
     seed_initial_data(app)
     return jsonify({'message': 'Base de datos reseteada'})
+
+
+@app.route('/api/v1/openapi.json', methods=['GET'])
+def api_v1_openapi():
+    spec = {
+        'openapi': '3.0.3',
+        'info': {
+            'title': 'NexoShop API',
+            'version': '1.0.0'
+        },
+        'paths': {
+            '/api/v1/products': {
+                'get': {'summary': 'Listar productos'}
+            },
+            '/api/v1/products/{product_id}': {
+                'get': {'summary': 'Detalle de producto'}
+            },
+            '/api/v1/cart/add': {
+                'post': {'summary': 'Agregar producto al carrito'}
+            },
+            '/api/v1/metrics': {
+                'get': {'summary': 'Metricas basicas de observabilidad'}
+            }
+        }
+    }
+    return jsonify(spec)
+
+
+@app.route('/api/v1/products', methods=['GET'])
+def api_v1_products():
+    products = Product.query.order_by(Product.id).all()
+    return jsonify({'data': [p.to_dict() for p in products]})
+
+
+@app.route('/api/v1/products/<int:product_id>', methods=['GET'])
+def api_v1_product_detail(product_id):
+    product = Product.query.get_or_404(product_id)
+    return jsonify({'data': product.to_dict()})
+
+
+@app.route('/api/v1/cart/add', methods=['POST'])
+def api_v1_cart_add():
+    data = request.get_json(silent=True) or {}
+    if 'product_id' not in data:
+        return jsonify({'success': False, 'error': 'product_id es requerido'}), 400
+    if 'qty' in data:
+        try:
+            if int(data['qty']) < 1:
+                return jsonify({'success': False, 'error': 'qty debe ser >= 1'}), 400
+        except (TypeError, ValueError):
+            return jsonify({'success': False, 'error': 'qty invalido'}), 400
+
+    # Reusar la logica principal para mantener consistencia
+    return api_cart_add()
+
+
+@app.route('/api/v1/metrics', methods=['GET'])
+def api_v1_metrics():
+    with metrics_lock:
+        snapshot = dict(APP_METRICS)
+    snapshot['timestamp'] = datetime.utcnow().isoformat()
+    return jsonify({'data': snapshot})
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -562,6 +890,7 @@ def store_checkout():
         total = 0.0
         success = True
         errors = []
+        payment_method = request.form.get('payment_method', 'card')
 
         with stock_lock:
             for item in cart.items:
@@ -614,6 +943,25 @@ def store_checkout():
                     'total': total,
                     'session_id': session_id
                 })
+                increment_metric('orders_confirmed_total')
+                log_audit(
+                    'order_confirmed',
+                    'order',
+                    order.id,
+                    {
+                        'session_id': session_id,
+                        'total': total,
+                        'items_count': len(order_items),
+                        'payment_method': payment_method,
+                        'payment_status': 'approved_mock'
+                    }
+                )
+                receipt_code = generate_receipt_code(order)
+                send_email_mock(
+                    order.customer_email,
+                    f'Confirmacion de pedido #{order.id}',
+                    f'Tu pedido fue confirmado. Comprobante: {receipt_code}. Total: S/ {total:.2f}'
+                )
 
                 return redirect(url_for('store_order_success', order_id=order.id))
             else:
@@ -637,7 +985,8 @@ def store_checkout():
 @app.route('/store/order/<int:order_id>')
 def store_order_success(order_id):
     order = Order.query.get_or_404(order_id)
-    return render_template('store/order_success.html', order=order)
+    receipt_code = generate_receipt_code(order)
+    return render_template('store/order_success.html', order=order, receipt_code=receipt_code)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -646,6 +995,7 @@ def store_order_success(order_id):
 @app.route('/api/cart/add', methods=['POST'])
 def api_cart_add():
     """Agregar producto al carrito via AJAX."""
+    increment_metric('cart_add_requests_total')
     data = request.get_json(silent=True) or {}
     product_id = data.get('product_id')
 

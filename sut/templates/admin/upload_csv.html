@@ -10,8 +10,10 @@
     <aside class="sidebar">
         <div class="sidebar-logo"><span>NexoShop</span> Admin</div>
         <nav class="sidebar-nav">
+            <a href="{{ url_for('admin_dashboard_view') }}" class="nav-item" id="nav-dashboard">🏠 Dashboard</a>
             <a href="{{ url_for('admin_inventory') }}" class="nav-item" id="nav-inventory">📦 Inventario</a>
             <a href="{{ url_for('admin_sales') }}" class="nav-item" id="nav-sales">🧾 Ventas</a>
+            <a href="{{ url_for('admin_reports') }}" class="nav-item" id="nav-reports">📈 Reportes</a>
             <a href="{{ url_for('admin_upload_csv') }}" class="nav-item active" id="nav-upload-csv">📊 Cargar CSV</a>
             <a href="{{ url_for('store_home') }}" class="nav-item" target="_blank">🛍️ Ver Tienda</a>
             <a href="{{ url_for('admin_logout') }}" class="nav-item nav-logout">🚪 Salir</a>
@@ -44,6 +46,7 @@
         <div class="card">
             <h2>Subir Archivo CSV</h2>
             <form method="POST" enctype="multipart/form-data" class="upload-form" id="csv-upload-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <div class="file-drop-area" id="file-drop-area">
                     <div class="file-icon">📄</div>
                     <p>Arrastra tu archivo CSV aquí o</p>
@@ -62,7 +65,6 @@
     </main>
 
     <script>
-        // Mostrar nombre del archivo seleccionado
         document.getElementById('csv-file-input').addEventListener('change', function(e) {
             const fileName = e.target.files[0] ? e.target.files[0].name : 'Ningún archivo seleccionado';
             document.getElementById('selected-file-name').textContent = fileName;

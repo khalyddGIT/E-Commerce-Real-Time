@@ -102,6 +102,31 @@ class CartSession(db.Model):
         }
 
 
+class AuditLog(db.Model):
+    """Bitacora de eventos administrativos y de negocio."""
+    __tablename__ = 'audit_logs'
+
+    id = db.Column(db.Integer, primary_key=True)
+    action = db.Column(db.String(80), nullable=False)
+    entity_type = db.Column(db.String(80), nullable=False, default='system')
+    entity_id = db.Column(db.String(80), nullable=False, default='')
+    user_name = db.Column(db.String(120), nullable=False, default='anonymous')
+    user_role = db.Column(db.String(40), nullable=False, default='guest')
+    details_json = db.Column(db.Text, nullable=False, default='{}')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    @property
+    def details(self):
+        try:
+            return json.loads(self.details_json or '{}')
+        except json.JSONDecodeError:
+            return {}
+
+    @details.setter
+    def details(self, value):
+        self.details_json = json.dumps(value if value is not None else {})
+
+
 def seed_initial_data(app):
     """Carga datos iniciales de prueba si la BD está vacía."""
     with app.app_context():

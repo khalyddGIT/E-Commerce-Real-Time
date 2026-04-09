@@ -8,6 +8,7 @@ import os
 import pytest
 import requests
 import logging
+from datetime import datetime
 
 # Aseguramos que los módulos del proyecto sean encontrados
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
@@ -23,7 +24,15 @@ logger = logging.getLogger(__name__)
 
 def pytest_configure(config):
     """Configuración de pytest al inicio."""
+    os.makedirs('reports', exist_ok=True)
     os.makedirs('reports/screenshots', exist_ok=True)
+    # Generar reporte HTML con timestamp para no sobrescribir ejecuciones previas
+    htmlpath = getattr(config.option, 'htmlpath', None)
+    if not htmlpath:
+        ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+        config.option.htmlpath = os.path.join('reports', f'report_{ts}.html')
+    if hasattr(config.option, 'self_contained_html'):
+        config.option.self_contained_html = True
 
 
 # ─── Hook para captura de screenshots en fallos ───────────────────────────────
@@ -177,6 +186,10 @@ def two_browsers():
 @pytest.fixture(scope='session', autouse=True)
 def verify_sut_running():
     """Verifica al inicio que el SUT esté disponible."""
+    if os.getenv('SKIP_SUT_CHECK', '0') == '1':
+        logger.info('[SUT] Verificacion omitida por SKIP_SUT_CHECK=1')
+        return
+
     try:
         r = requests.get(f"{SUT_BASE_URL}/store", timeout=5)
         if r.status_code != 200:

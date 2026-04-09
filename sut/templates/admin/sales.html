@@ -10,9 +10,16 @@
     <aside class="sidebar">
         <div class="sidebar-logo"><span>NexoShop</span> Admin</div>
         <nav class="sidebar-nav">
+            <a href="{{ url_for('admin_dashboard_view') }}" class="nav-item" id="nav-dashboard">🏠 Dashboard</a>
             <a href="{{ url_for('admin_inventory') }}" class="nav-item" id="nav-inventory">📦 Inventario</a>
             <a href="{{ url_for('admin_sales') }}" class="nav-item active" id="nav-sales">🧾 Ventas</a>
+            <a href="{{ url_for('admin_reports') }}" class="nav-item" id="nav-reports">📈 Reportes</a>
+            {% if admin_role == 'admin' %}
+            <a href="{{ url_for('admin_observability') }}" class="nav-item" id="nav-observability">🩺 Observabilidad</a>
+            {% endif %}
+            {% if admin_role in ['admin', 'operator'] %}
             <a href="{{ url_for('admin_upload_csv') }}" class="nav-item" id="nav-upload-csv">📊 Cargar CSV</a>
+            {% endif %}
             <a href="{{ url_for('store_home') }}" class="nav-item" target="_blank">🛍️ Ver Tienda</a>
             <a href="{{ url_for('admin_logout') }}" class="nav-item nav-logout">🚪 Salir</a>
         </nav>
@@ -25,11 +32,8 @@
                 <p>{{ total_sales_count }} venta(s) confirmada(s) - Total vendido: S/ {{ "%.2f"|format(total_sales_amount) }}</p>
             </div>
             <div class="header-actions">
-                <a
-                    href="{{ url_for('admin_sales', q=q, status=status_filter, date_from=date_from, date_to=date_to, per_page=per_page, export='csv') }}"
-                    class="btn btn-secondary"
-                    id="btn-export-sales-csv"
-                >
+                <a href="{{ url_for('admin_sales', q=q, status=status_filter, date_from=date_from, date_to=date_to, per_page=per_page, sort_by=sort_by, sort_dir=sort_dir, export='csv') }}"
+                   class="btn btn-secondary" id="btn-export-sales-csv">
                     ⬇ Exportar CSV
                 </a>
                 <a href="{{ url_for('admin_inventory') }}" class="btn btn-secondary">Ver Inventario</a>
@@ -88,14 +92,16 @@
             <table class="data-table" id="sales-table">
                 <thead>
                     <tr>
-                        <th>Orden</th>
-                        <th>Fecha</th>
-                        <th>Cliente</th>
+                        <th><a class="sort-link" href="{{ url_for('admin_sales', q=q, status=status_filter, date_from=date_from, date_to=date_to, per_page=per_page, sort_by='id', sort_dir='asc' if sort_by != 'id' or sort_dir == 'desc' else 'desc') }}">Orden</a></th>
+                        <th><a class="sort-link" href="{{ url_for('admin_sales', q=q, status=status_filter, date_from=date_from, date_to=date_to, per_page=per_page, sort_by='created_at', sort_dir='asc' if sort_by != 'created_at' or sort_dir == 'desc' else 'desc') }}">Fecha</a></th>
+                        <th><a class="sort-link" href="{{ url_for('admin_sales', q=q, status=status_filter, date_from=date_from, date_to=date_to, per_page=per_page, sort_by='customer_name', sort_dir='asc' if sort_by != 'customer_name' or sort_dir == 'desc' else 'desc') }}">Cliente</a></th>
                         <th>Email</th>
                         <th>Productos vendidos</th>
-                        <th>Total</th>
-                        <th>Estado</th>
+                        <th><a class="sort-link" href="{{ url_for('admin_sales', q=q, status=status_filter, date_from=date_from, date_to=date_to, per_page=per_page, sort_by='total', sort_dir='asc' if sort_by != 'total' or sort_dir == 'desc' else 'desc') }}">Total</a></th>
+                        <th><a class="sort-link" href="{{ url_for('admin_sales', q=q, status=status_filter, date_from=date_from, date_to=date_to, per_page=per_page, sort_by='status', sort_dir='asc' if sort_by != 'status' or sort_dir == 'desc' else 'desc') }}">Estado</a></th>
+                        {% if admin_role in ['admin', 'operator'] %}
                         <th>Acción</th>
+                        {% endif %}
                     </tr>
                 </thead>
                 <tbody id="sales-tbody">
@@ -112,9 +118,11 @@
                                 {{ row.status }}
                             </span>
                         </td>
+                        {% if admin_role in ['admin', 'operator'] %}
                         <td>
                             {% if row.allowed_next_statuses %}
                             <form method="POST" action="{{ url_for('admin_update_order_status', order_id=row.id) }}" class="order-status-form">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                                 <input type="hidden" name="q" value="{{ q }}">
                                 <input type="hidden" name="status_filter" value="{{ status_filter }}">
                                 <input type="hidden" name="date_from" value="{{ date_from }}">
@@ -133,10 +141,13 @@
                             <span class="hint">Sin cambios</span>
                             {% endif %}
                         </td>
+                        {% endif %}
                     </tr>
                     {% else %}
                     <tr id="empty-sales-row">
-                        <td colspan="8" class="empty-state">No hay ventas para los filtros seleccionados.</td>
+                        <td colspan="{% if admin_role in ['admin', 'operator'] %}8{% else %}7{% endif %}" class="empty-state">
+                            No hay ventas para los filtros seleccionados.
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -146,16 +157,14 @@
             <div class="sales-pagination" id="sales-pagination">
                 {% if page > 1 %}
                 <a class="btn btn-secondary btn-sm"
-                   href="{{ url_for('admin_sales', q=q, status=status_filter, date_from=date_from, date_to=date_to, per_page=per_page, page=page-1) }}">
+                   href="{{ url_for('admin_sales', q=q, status=status_filter, date_from=date_from, date_to=date_to, per_page=per_page, sort_by=sort_by, sort_dir=sort_dir, page=page-1) }}">
                     Anterior
                 </a>
                 {% endif %}
-
                 <span class="pagination-info">Página {{ page }} de {{ total_pages }}</span>
-
                 {% if page < total_pages %}
                 <a class="btn btn-secondary btn-sm"
-                   href="{{ url_for('admin_sales', q=q, status=status_filter, date_from=date_from, date_to=date_to, per_page=per_page, page=page+1) }}">
+                   href="{{ url_for('admin_sales', q=q, status=status_filter, date_from=date_from, date_to=date_to, per_page=per_page, sort_by=sort_by, sort_dir=sort_dir, page=page+1) }}">
                     Siguiente
                 </a>
                 {% endif %}
