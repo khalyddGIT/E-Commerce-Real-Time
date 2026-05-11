@@ -24,14 +24,14 @@ def main():
 
     # 1. Instalar dependencias del SUT
     print("\n[1/3] Instalando dependencias del SUT...")
-    code = run(f"{sys.executable} -m pip install -r requirements.txt", cwd=SUT_DIR)
+    code = run(f'"{sys.executable}" -m pip install -r requirements.txt', cwd=SUT_DIR)
     if code != 0:
         print("Error instalando dependencias del SUT.")
         sys.exit(1)
 
     # 2. Instalar dependencias del framework de tests
     print("\n[2/3] Instalando dependencias del framework de tests...")
-    code = run(f"{sys.executable} -m pip install -r requirements.txt", cwd=ROOT)
+    code = run(f'"{sys.executable}" -m pip install -r requirements.txt', cwd=ROOT)
     if code != 0:
         print("Error instalando dependencias de testing.")
         sys.exit(1)
@@ -43,7 +43,7 @@ def main():
     print("  → Para ejecutar tests: pytest tests/ -v")
     print("  → Presiona Ctrl+C para detener el servidor\n")
 
-    run(f"{sys.executable} app.py", cwd=SUT_DIR)
+    run(f'"{sys.executable}" app.py', cwd=SUT_DIR)
 
 
 if __name__ == '__main__':
