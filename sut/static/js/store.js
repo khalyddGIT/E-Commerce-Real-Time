@@ -84,7 +84,7 @@ function addToCart(productId) {
         })
         .catch(() => {
             showToast('Error al agregar al carrito', 'error');
-            btn.textContent = 'Añadir al carrito';
+            btn.textContent = 'Añadir al juanito';
             btn.disabled = false;
         });
 }
