@@ -97,7 +97,7 @@ function addToCartDetail() {
             }
         })
         .catch(() => {
-            btn.textContent = 'Anadir al carrito';
+            btn.textContent = 'Anadir juanito';
             btn.disabled = false;
         });
 }
